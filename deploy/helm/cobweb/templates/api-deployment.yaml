@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "cobweb.fullname" . }}-api
+  labels:
+    {{- include "cobweb.labels" . | nindent 4 }}
+    component: api
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Chart.Name }}
+      component: api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Chart.Name }}
+        component: api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1001
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: api
+          image: "{{ .Values.image.registry }}/{{ .Values.image.repository }}/api:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{ containerPort: 8000, name: http }]
+          env:
+            {{- range $k, $v := .Values.api.env }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+            - name: COBWEB_DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ include "cobweb.fullname" . }}-secrets, key: database_url } }
+            - name: COBWEB_REDIS_URL
+              valueFrom: { secretKeyRef: { name: {{ include "cobweb.fullname" . }}-secrets, key: redis_url } }
+            - name: COBWEB_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: {{ include "cobweb.fullname" . }}-secrets, key: secret_key } }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 30
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "cobweb.fullname" . }}-api
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Chart.Name }}
+    component: api
+  ports:
+    - port: 80
+      targetPort: http
+      name: http

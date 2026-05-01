@@ -1,0 +1,56 @@
+image:
+  registry: ghcr.io
+  repository: cobweb
+  pullPolicy: IfNotPresent
+  tag: "0.1.0"
+
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: 200m, memory: 256Mi }
+    limits: { cpu: 1, memory: 1Gi }
+  env:
+    COBWEB_ENV: prod
+
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits: { cpu: 500m, memory: 512Mi }
+
+ingress:
+  enabled: true
+  className: nginx
+  host: cobweb.example.com
+  tls:
+    enabled: true
+    secretName: cobweb-tls
+
+postgres:
+  url: ""  # set via secret
+redis:
+  url: ""
+rabbitmq:
+  url: ""
+s3:
+  endpoint: ""
+  bucket: cobweb-artifacts
+
+scanners:
+  nuclei:
+    image: cobweb/nuclei-runner:0.1.0
+    resources:
+      requests: { cpu: "1", memory: 1Gi }
+      limits: { cpu: "2", memory: 4Gi }
+  zap:
+    image: cobweb/zap-runner:0.1.0
+    resources:
+      requests: { cpu: "1", memory: 2Gi }
+      limits: { cpu: "2", memory: 4Gi }
+
+# Per-tenant egress gateway IP mapping. Populated by ops.
+tenantEgress: {}
+
+networkPolicy:
+  enabled: true
+  ingressNamespace: ingress-nginx

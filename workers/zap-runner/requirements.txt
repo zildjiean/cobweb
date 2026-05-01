@@ -1,0 +1,5 @@
+aio-pika>=9.5
+boto3>=1.35
+httpx>=0.27
+loguru>=0.7
+zaproxy>=0.4.0
