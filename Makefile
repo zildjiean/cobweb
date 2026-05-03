@@ -1,4 +1,4 @@
-.PHONY: help bootstrap dev-up dev-down register-admin logs status clean bulk-map
+.PHONY: help bootstrap dev-up dev-down register-admin logs status clean bulk-map web-restart ship
 
 help:  ## Show this help
 	@awk 'BEGIN{FS=":.*##"; printf "Cobweb dev commands:\n\n"} /^[a-zA-Z_-]+:.*##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -40,3 +40,10 @@ clean:  ## Stop everything (host + docker) — keeps volumes
 
 bulk-map:  ## Classify finding templates → OWASP/PCI/ISO via LLM (one-shot)
 	cd apps/api && uv run python -m cobweb.scripts.bulk_compliance_map $(ARGS)
+
+web-restart:  ## Rebuild apps/web and restart in production mode (`next start`)
+	./scripts/web-restart.sh
+
+ship:  ## git push + rebuild web + restart production server
+	git push
+	$(MAKE) web-restart

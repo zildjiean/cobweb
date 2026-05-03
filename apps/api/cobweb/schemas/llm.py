@@ -39,3 +39,19 @@ class TranslateResponse(BaseModel):
     tokens_in: int | None = None
     tokens_out: int | None = None
     created_at: str
+
+
+class RemediationRequest(BaseModel):
+    custom_prompt: str | None = Field(default=None, max_length=8000)
+    refresh: bool = False
+
+
+class RemediationResponse(BaseModel):
+    finding_id: str
+    provider: str
+    model: str
+    content: str
+    cached: bool
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    created_at: str

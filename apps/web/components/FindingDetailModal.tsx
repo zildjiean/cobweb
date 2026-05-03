@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Check, Copy, Languages, RefreshCw, X } from "lucide-react";
+import { Check, Copy, Languages, RefreshCw, Sparkles, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { SeverityPill } from "@/components/ui/Badges";
 import { Skeleton } from "@/components/ui/EmptyState";
@@ -12,6 +12,17 @@ import { useToast } from "@/components/ui/Toast";
 interface TranslationResult {
   finding_id: string;
   lang: string;
+  provider: string;
+  model: string;
+  content: string;
+  cached: boolean;
+  tokens_in: number | null;
+  tokens_out: number | null;
+  created_at: string;
+}
+
+interface RemediationResult {
+  finding_id: string;
   provider: string;
   model: string;
   content: string;
@@ -76,12 +87,14 @@ export default function FindingDetailModal({
   const [translation, setTranslation] = useState<TranslationResult | null>(null);
   const [showCustomPrompt, setShowCustomPrompt] = useState(false);
   const [customPrompt, setCustomPrompt] = useState("");
+  const [remediation, setRemediation] = useState<RemediationResult | null>(null);
   const toast = useToast();
 
   useEffect(() => {
     setTranslation(null);
     setShowCustomPrompt(false);
     setCustomPrompt("");
+    setRemediation(null);
   }, [findingId]);
 
   const translate = useMutation({
@@ -119,6 +132,44 @@ export default function FindingDetailModal({
         description:
           status === 412
             ? "Set provider, model, and API key in Admin → LLM translation."
+            : err instanceof Error
+              ? err.message.slice(0, 160)
+              : undefined,
+      });
+    },
+  });
+
+  const remediate = useMutation({
+    mutationFn: (opts: { refresh: boolean }) =>
+      api<RemediationResult>(`/api/v1/findings/${findingId}/remediation`, {
+        method: "POST",
+        body: JSON.stringify({ refresh: opts.refresh }),
+      }),
+    onSuccess: (data) => {
+      setRemediation(data);
+      toast.push({
+        kind: "success",
+        title: data.cached ? "Loaded cached remediation" : "AI remediation ready",
+        description: `${data.provider} · ${data.model}${
+          data.tokens_in != null
+            ? ` · ${data.tokens_in}/${data.tokens_out ?? "?"} tokens`
+            : ""
+        }`,
+      });
+    },
+    onError: (err) => {
+      const status = err instanceof ApiError ? err.status : 0;
+      toast.push({
+        kind: "error",
+        title:
+          status === 412
+            ? "LLM not configured"
+            : status === 429
+              ? "Provider rate limit"
+              : "AI remediation failed",
+        description:
+          status === 412
+            ? "Set provider, model, and API key in Admin → LLM."
             : err instanceof Error
               ? err.message.slice(0, 160)
               : undefined,
@@ -283,6 +334,71 @@ export default function FindingDetailModal({
                       )}
                     </div>
                     <Markdown>{translation.content}</Markdown>
+                  </div>
+                )}
+              </div>
+            </Section>
+
+            <Section label="AI remediation">
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => remediate.mutate({ refresh: false })}
+                    disabled={remediate.isPending}
+                    className="btn-primary inline-flex items-center gap-1.5"
+                  >
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {remediate.isPending
+                      ? "Asking AI…"
+                      : remediation
+                        ? "Remediation shown"
+                        : "Ask AI for fix"}
+                  </button>
+                  {remediation && (
+                    <button
+                      type="button"
+                      onClick={() => remediate.mutate({ refresh: true })}
+                      disabled={remediate.isPending}
+                      className="btn-ghost inline-flex items-center gap-1.5 text-xs"
+                      title="Force re-ask (skip cache)"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Refresh
+                    </button>
+                  )}
+                  <p className="text-xs text-slate-500">
+                    Uses your org&apos;s configured LLM. Includes finding
+                    metadata + truncated request/response as context.
+                  </p>
+                </div>
+                {remediate.error instanceof ApiError && (
+                  <p className="text-sm text-severity-critical">
+                    {remediate.error.status === 412
+                      ? "LLM not configured — ask an org admin to set provider, model, and API key in Admin → LLM."
+                      : remediate.error.message}
+                  </p>
+                )}
+                {remediation && (
+                  <div className="rounded-md border border-accent/30 bg-accent/5 p-3">
+                    <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                      <span className="font-mono">
+                        {remediation.provider} · {remediation.model}
+                      </span>
+                      {remediation.cached && (
+                        <span className="badge bg-emerald-500/15 text-emerald-300">
+                          cached
+                        </span>
+                      )}
+                      {(remediation.tokens_in != null ||
+                        remediation.tokens_out != null) && (
+                        <span className="font-mono">
+                          tokens in/out: {remediation.tokens_in ?? "—"}/
+                          {remediation.tokens_out ?? "—"}
+                        </span>
+                      )}
+                    </div>
+                    <Markdown>{remediation.content}</Markdown>
                   </div>
                 )}
               </div>
