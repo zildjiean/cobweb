@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -15,14 +16,23 @@ from cobweb import __version__
 from cobweb.api.public.router import public_router
 from cobweb.api.v1.router import api_router
 from cobweb.core.settings import get_settings
+from cobweb.services.scheduler_service import scheduler_loop
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     settings = get_settings()
     logger.info("cobweb-api starting | env={} debug={}", settings.env, settings.debug)
-    yield
-    logger.info("cobweb-api shutting down")
+    scheduler_task = asyncio.create_task(scheduler_loop())
+    try:
+        yield
+    finally:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
+        logger.info("cobweb-api shutting down")
 
 
 def create_app() -> FastAPI:

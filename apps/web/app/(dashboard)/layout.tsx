@@ -8,6 +8,7 @@ import {
   FolderKanban,
   ScanLine,
   Bug,
+  CalendarClock,
   Target,
   FileText,
   Plug,
@@ -37,6 +38,7 @@ const NAV_GROUPS: {
     label: "Security",
     items: [
       { href: "/scans", label: "Scans", icon: ScanLine },
+      { href: "/schedules", label: "Schedules", icon: CalendarClock },
       { href: "/vulnerabilities", label: "Vulnerabilities", icon: Bug },
       { href: "/reports", label: "Reports", icon: FileText },
     ],

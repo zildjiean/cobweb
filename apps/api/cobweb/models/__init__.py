@@ -14,6 +14,7 @@ from cobweb.models.scan import (
     ScanStatus,
     Severity,
 )
+from cobweb.models.schedule import ScanSchedule, ScheduleFrequency
 from cobweb.models.target import Target, TargetStatus
 from cobweb.models.user import User
 from cobweb.models.vulnerability import Vulnerability, VulnState
@@ -35,7 +36,9 @@ __all__ = [
     "Scan",
     "ScanArtifact",
     "ScanProfile",
+    "ScanSchedule",
     "ScanStatus",
+    "ScheduleFrequency",
     "Severity",
     "Target",
     "TargetStatus",
