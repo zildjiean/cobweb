@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Check, Copy, Plus, Target as TargetIcon, Trash2 } from "lucide-react";
+import { Check, Copy, KeyRound, Plus, Target as TargetIcon, Trash2 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
 import { useToast } from "@/components/ui/Toast";
 import { StatusPill } from "@/components/ui/Badges";
@@ -22,6 +22,8 @@ interface Target {
   base_url: string;
   status: string;
   verification_token: string | null;
+  has_auth?: boolean;
+  auth_type?: "header" | "cookie" | null;
 }
 
 export default function TargetsPage() {
@@ -312,6 +314,7 @@ function TargetCard({
           <Trash2 className="h-4 w-4" />
         </button>
       </div>
+      <AuthPanel target={target} />
       {target.status === "pending_verification" && target.verification_token && (
         <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 text-xs">
           <p className="text-slate-200">
@@ -352,6 +355,155 @@ function TargetCard({
             {verifying ? "Checking…" : "Verify now"}
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+function AuthPanel({ target }: { target: Target }) {
+  const qc = useQueryClient();
+  const toast = useToast();
+  const [editing, setEditing] = useState(false);
+  const [authType, setAuthType] = useState<"header" | "cookie">(
+    target.auth_type ?? "header",
+  );
+  const [headerName, setHeaderName] = useState("Authorization");
+  const [headerValue, setHeaderValue] = useState("");
+  const [cookieValue, setCookieValue] = useState("");
+
+  const save = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/targets/${target.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          auth:
+            authType === "header"
+              ? { type: "header", name: headerName, value: headerValue }
+              : { type: "cookie", value: cookieValue },
+        }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["targets"] });
+      setEditing(false);
+      setHeaderValue("");
+      setCookieValue("");
+      toast.push({ kind: "success", title: "Auth credentials saved (encrypted at rest)" });
+    },
+    onError: (err) =>
+      toast.push({
+        kind: "error",
+        title: "Could not save auth",
+        description: err instanceof ApiError ? err.message.slice(0, 160) : undefined,
+      }),
+  });
+
+  const clear = useMutation({
+    mutationFn: () =>
+      api(`/api/v1/targets/${target.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ clear_auth: true }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["targets"] });
+      toast.push({ kind: "success", title: "Auth cleared — scans will run anonymously" });
+    },
+  });
+
+  return (
+    <div className="mt-3 rounded-lg border border-border-subtle bg-bg/40 p-3 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-slate-300">
+          <KeyRound className="h-3.5 w-3.5" />
+          <span className="font-medium">Authentication</span>
+          {target.has_auth ? (
+            <span className="badge bg-emerald-500/15 text-emerald-300">
+              {target.auth_type} configured
+            </span>
+          ) : (
+            <span className="text-slate-500">none — scans run as anonymous</span>
+          )}
+        </div>
+        <div className="flex items-center gap-1">
+          {target.has_auth && (
+            <button
+              type="button"
+              onClick={() => clear.mutate()}
+              disabled={clear.isPending}
+              className="btn-ghost text-[11px] text-severity-critical"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setEditing((v) => !v)}
+            className="btn-ghost text-[11px]"
+          >
+            {editing ? "Cancel" : target.has_auth ? "Replace" : "Configure"}
+          </button>
+        </div>
+      </div>
+      {editing && (
+        <form
+          className="mt-3 space-y-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (authType === "header" && (!headerName || !headerValue)) return;
+            if (authType === "cookie" && !cookieValue) return;
+            save.mutate();
+          }}
+        >
+          <div className="flex gap-2">
+            <select
+              className="input flex-1"
+              value={authType}
+              onChange={(e) => setAuthType(e.target.value as "header" | "cookie")}
+            >
+              <option value="header">HTTP header (e.g. Authorization: Bearer …)</option>
+              <option value="cookie">Cookie header (session=…; csrf=…)</option>
+            </select>
+          </div>
+          {authType === "header" ? (
+            <div className="grid gap-2 md:grid-cols-[160px_1fr]">
+              <input
+                className="input font-mono"
+                placeholder="Header name"
+                value={headerName}
+                onChange={(e) => setHeaderName(e.target.value)}
+              />
+              <input
+                type="password"
+                className="input font-mono"
+                placeholder="Header value (e.g. Bearer eyJ…)"
+                value={headerValue}
+                onChange={(e) => setHeaderValue(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+          ) : (
+            <input
+              type="password"
+              className="input font-mono"
+              placeholder="Cookie string (e.g. session=abc; csrf=xyz)"
+              value={cookieValue}
+              onChange={(e) => setCookieValue(e.target.value)}
+              autoComplete="off"
+            />
+          )}
+          <p className="text-[10px] text-slate-500">
+            Stored encrypted (Fernet) — never shown after saving. Will be sent
+            on every request to this target during scans.
+          </p>
+          <div className="flex justify-end gap-1">
+            <button
+              type="submit"
+              disabled={save.isPending}
+              className="btn-primary text-[11px]"
+            >
+              {save.isPending ? "Saving…" : "Save"}
+            </button>
+          </div>
+        </form>
       )}
     </div>
   );

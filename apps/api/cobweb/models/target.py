@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import enum
 
-from sqlalchemy import JSON, ForeignKey, String
+from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from cobweb.db.base import Base, TimestampMixin, enum_col, new_uuid
@@ -25,7 +25,10 @@ class Target(Base, TimestampMixin):
     base_url: Mapped[str] = mapped_column(String(2048), nullable=False)
     scope_includes: Mapped[list[str]] = mapped_column(JSON, default=list)
     scope_excludes: Mapped[list[str]] = mapped_column(JSON, default=list)
-    auth_config: Mapped[dict] = mapped_column(JSON, default=dict)  # encrypted at rest
+    auth_config: Mapped[dict] = mapped_column(JSON, default=dict)  # legacy / unused
+    auth_secret_ciphertext: Mapped[str | None] = mapped_column(
+        Text, nullable=True
+    )  # Fernet-encrypted JSON: {"type": "header"|"cookie", ...}
     status: Mapped[TargetStatus] = mapped_column(
         enum_col(TargetStatus, name="target_status"),
         nullable=False,

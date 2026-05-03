@@ -198,6 +198,29 @@ class ZapClient:
             return None
         return body.get("message")
 
+    async def add_request_header(self, name: str, value: str, description: str) -> None:
+        """Use ZAP's Replacer addon to inject a header into every outbound
+        request. `description` is the rule's unique key — pass it back to
+        remove_replacer_rule when the scan finishes."""
+        await self._get(
+            "/JSON/replacer/action/addRule/",
+            description=description,
+            enabled="true",
+            matchType="REQ_HEADER",
+            matchString=name,
+            matchRegex="false",
+            replacement=value,
+            initiators="",
+        )
+
+    async def remove_replacer_rule(self, description: str) -> None:
+        try:
+            await self._get(
+                "/JSON/replacer/action/removeRule/", description=description
+            )
+        except httpx.HTTPError as e:
+            logger.warning("removeRule({}) failed: {}", description, e)
+
 
 class ApiClient:
     def __init__(self, base: str, token: str) -> None:
@@ -350,6 +373,25 @@ async def handle_job(api: ApiClient, zap: ZapClient, job: dict[str, Any]) -> Non
     stream_task: asyncio.Task[int] | None = None
     stream_stop = asyncio.Event()
     completed_normally = False
+    auth_rule_descriptions: list[str] = []  # cleaned up in finally
+
+    # Authenticated scanning — install Replacer rule(s) before any traffic.
+    auth = job.get("auth")
+    if isinstance(auth, dict):
+        atype = auth.get("type")
+        try:
+            if atype == "header" and auth.get("name") and auth.get("value"):
+                desc = f"cobweb-auth-{scan_id}-header"
+                await zap.add_request_header(auth["name"], auth["value"], desc)
+                auth_rule_descriptions.append(desc)
+                logger.info("scan {} ZAP header auth installed ({})", scan_id, auth["name"])
+            elif atype == "cookie" and auth.get("value"):
+                desc = f"cobweb-auth-{scan_id}-cookie"
+                await zap.add_request_header("Cookie", auth["value"], desc)
+                auth_rule_descriptions.append(desc)
+                logger.info("scan {} ZAP cookie auth installed", scan_id)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("scan {} could not install auth rule: {}", scan_id, exc)
 
     try:
         # Seed the URL into ZAP's session so active scan won't reject with URL_NOT_FOUND.
@@ -458,6 +500,10 @@ async def handle_job(api: ApiClient, zap: ZapClient, job: dict[str, Any]) -> Non
         logger.exception("ZAP scan {} failed", scan_id)
         await api.status(scan_id, status="failed", error_message=str(e)[:500])
     finally:
+        # Always remove auth replacer rules so credentials don't leak into
+        # subsequent scans on the shared ZAP instance.
+        for desc in auth_rule_descriptions:
+            await zap.remove_replacer_rule(desc)
         # Cleanup: stop ZAP-side scans so they don't keep crawling after we exit.
         # Critical: do this on FAIL too, not just cancel — otherwise a transient
         # error abandons the active scan and it keeps consuming ZAP CPU/RAM.

@@ -10,13 +10,16 @@ from __future__ import annotations
 
 import hashlib
 import ipaddress
+import json
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
+from loguru import logger
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cobweb.core.crypto import decrypt
 from cobweb.models.scan import Scan, ScanProfile, ScanStatus
 from cobweb.models.target import Target, TargetStatus
 from cobweb.services.pubsub import publish_scan_event
@@ -62,6 +65,27 @@ def dedupe_hash(target_id: str, template_id: str, location: str, param: str = ""
     return hashlib.sha256(blob.encode("utf-8")).hexdigest()
 
 
+def _decrypt_target_auth(target: Target) -> dict | None:
+    """Decrypt the target's auth secret (Fernet) and parse the inner JSON.
+    Returns None when the target has no auth or the blob is corrupt — corrupt
+    blobs log a warning so the scan still runs unauthenticated rather than
+    silently failing the dispatch."""
+    ct = target.auth_secret_ciphertext
+    if not ct:
+        return None
+    try:
+        data = json.loads(decrypt(ct))
+    except (ValueError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "target {} auth_secret unreadable, scanning unauthenticated: {}",
+            target.id, exc,
+        )
+        return None
+    if not isinstance(data, dict) or data.get("type") not in ("header", "cookie"):
+        return None
+    return data
+
+
 async def create_scan(
     db: AsyncSession,
     *,
@@ -95,6 +119,7 @@ async def create_scan(
     await db.flush()
 
     queue = SCAN_QUEUE_NUCLEI if engine == "nuclei" else SCAN_QUEUE_ZAP
+    auth_payload = _decrypt_target_auth(target)
     job = {
         "scan_id": scan.id,
         "target_id": target.id,
@@ -106,6 +131,7 @@ async def create_scan(
         "org_id": org_id,
         "project_id": project_id,
         "config": config or {},
+        "auth": auth_payload,  # None when target has no credentials configured
     }
     publisher = get_publisher()
     await publisher.publish(queue, job)

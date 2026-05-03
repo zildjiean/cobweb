@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from cobweb.core.crypto import encrypt
 from cobweb.core.deps import CurrentUser, get_current_user
 from cobweb.core.rbac import require
 from cobweb.core.security import generate_api_key
@@ -15,9 +18,34 @@ from cobweb.db.base import get_db
 from cobweb.models.project import Project
 from cobweb.models.target import Target, TargetStatus
 from cobweb.schemas.project import ProjectCreate, ProjectResponse, ProjectUpdate
-from cobweb.schemas.target import TargetCreate, TargetResponse
+from cobweb.schemas.target import (
+    AuthConfig,
+    TargetCreate,
+    TargetResponse,
+    TargetUpdate,
+)
 from cobweb.services.audit_service import log_event
 from cobweb.services.target_verification import VerificationError, verify_target
+
+
+def _auth_type_from_ciphertext(ciphertext: str | None) -> str | None:
+    """Peek at the encrypted JSON's 'type' field WITHOUT exposing the value.
+    Returns None if no auth set or the blob is corrupt — corrupt blobs are
+    treated as "no auth" so a key rotation doesn't crash the listing endpoint.
+    """
+    if not ciphertext:
+        return None
+    try:
+        from cobweb.core.crypto import decrypt
+        data = json.loads(decrypt(ciphertext))
+    except (ValueError, json.JSONDecodeError):
+        return None
+    t = data.get("type") if isinstance(data, dict) else None
+    return t if t in ("header", "cookie") else None
+
+
+def _encrypt_auth(auth: AuthConfig) -> str:
+    return encrypt(auth.model_dump_json())
 
 router = APIRouter(tags=["projects"])
 
@@ -30,11 +58,14 @@ def _project_out(p: Project) -> ProjectResponse:
 
 
 def _target_out(t: Target) -> TargetResponse:
+    auth_type = _auth_type_from_ciphertext(t.auth_secret_ciphertext)
     return TargetResponse(
         id=t.id, project_id=t.project_id, name=t.name, base_url=t.base_url,
         scope_includes=t.scope_includes or [], scope_excludes=t.scope_excludes or [],
         status=t.status.value, verification_token=t.verification_token,
         created_at=t.created_at.isoformat(),
+        has_auth=auth_type is not None,
+        auth_type=auth_type,
     )
 
 
@@ -172,6 +203,7 @@ async def create_target(
         base_url=str(body.base_url),
         scope_includes=body.scope_includes,
         scope_excludes=body.scope_excludes,
+        auth_secret_ciphertext=_encrypt_auth(body.auth) if body.auth else None,
         status=(
             TargetStatus.VERIFIED if skip_verify else TargetStatus.PENDING_VERIFICATION
         ),
@@ -185,9 +217,46 @@ async def create_target(
         payload={
             "base_url": str(body.base_url),
             "auto_verified": skip_verify,
+            "has_auth": bool(body.auth),
+            "auth_type": body.auth.type if body.auth else None,
         },
     )
     await db.commit()
+    return _target_out(target)
+
+
+@router.patch("/targets/{target_id}", response_model=TargetResponse)
+async def update_target(
+    target_id: str,
+    body: TargetUpdate,
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Partial update — currently scoped to auth credentials only.
+    Send `clear_auth: true` to remove. Send `auth: {...}` to set/replace."""
+    require(current.role, "target:update")
+    target = await db.get(Target, target_id)
+    if not target:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Target not found")
+    project = await db.get(Project, target.project_id)
+    if not project or project.org_id != current.org_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Target not found")
+
+    audit_payload: dict = {}
+    if body.clear_auth:
+        target.auth_secret_ciphertext = None
+        audit_payload["cleared_auth"] = True
+    elif body.auth:
+        target.auth_secret_ciphertext = _encrypt_auth(body.auth)
+        audit_payload["set_auth_type"] = body.auth.type
+
+    await log_event(
+        db, org_id=current.org_id, actor_id=current.user.id,
+        action="target.update", resource_type="target", resource_id=target.id,
+        payload=audit_payload,
+    )
+    await db.commit()
+    await db.refresh(target)
     return _target_out(target)
 
 

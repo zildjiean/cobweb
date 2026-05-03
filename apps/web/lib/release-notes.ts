@@ -1,4 +1,4 @@
-export const CURRENT_VERSION = "0.3.0";
+export const CURRENT_VERSION = "0.4.0";
 
 export type Highlight = {
   label: string;
@@ -13,6 +13,43 @@ export type Release = {
 };
 
 export const RELEASES: Release[] = [
+  {
+    version: "0.4.0",
+    date: "2026-05-03",
+    title: "AI fixes, replay, schedules, and authenticated scans",
+    highlights: [
+      {
+        label: "AI remediation per finding",
+        detail:
+          "Click 'Ask AI for fix' in any finding — Cobweb sends the metadata, request, and response to your configured LLM and returns a focused remediation plan (What broke / Fix / Verify) in markdown.",
+      },
+      {
+        label: "Scheduled scans",
+        detail:
+          "New /schedules page lets you run a target on a recurring cadence — hourly, daily, weekly, or monthly. Each fires automatically (background loop in the API) and supports on-demand 'run now', pause/resume, and delete.",
+      },
+      {
+        label: "Authenticated scanning",
+        detail:
+          "Targets now accept HTTP header (e.g. Authorization: Bearer …) or Cookie credentials, encrypted at rest with Fernet. Both Nuclei and ZAP send them on every request — covering JWT-protected APIs and session-based apps.",
+      },
+      {
+        label: "HTTP request/response replay + copy-as-curl",
+        detail:
+          "Findings now carry the raw HTTP that triggered them. The Request section has a 'curl' badge that copies a working curl command straight to clipboard for verification.",
+      },
+      {
+        label: "Scan diff view",
+        detail:
+          "Scan detail page now shows a 4-card diff vs the previous scan: New / Regression / Fixed / Recurring — answer 'are we making progress' at a glance.",
+      },
+      {
+        label: "make ship + web-restart",
+        detail:
+          "New Makefile targets: 'make web-restart' rebuilds + restarts the production web server, 'make ship' adds a git push. No more dev-mode lag in production browsing.",
+      },
+    ],
+  },
   {
     version: "0.3.0",
     date: "2026-05-03",

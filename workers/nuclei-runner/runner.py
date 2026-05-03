@@ -354,6 +354,18 @@ async def handle_job(api: ApiClient, job: dict[str, Any]) -> None:
     if isinstance(config.get("nuclei_args"), list):
         extra += [str(a) for a in config["nuclei_args"]]
 
+    # Authenticated scanning — `-H "Name: value"` for header type, `-H "Cookie: ..."`
+    # for cookie type. Logged without the secret so audit can confirm it was used.
+    auth = job.get("auth")
+    if isinstance(auth, dict):
+        atype = auth.get("type")
+        if atype == "header" and auth.get("name") and auth.get("value"):
+            extra += ["-H", f"{auth['name']}: {auth['value']}"]
+            logger.info("scan {} using header auth ({})", scan_id, auth["name"])
+        elif atype == "cookie" and auth.get("value"):
+            extra += ["-H", f"Cookie: {auth['value']}"]
+            logger.info("scan {} using cookie auth", scan_id)
+
     try:
         with tempfile.TemporaryDirectory() as tmp:
             proc, out = await spawn_nuclei(
