@@ -449,7 +449,13 @@ export default function FindingDetailModal({
 
             {detail.data.request && (
               <Section label="Request payload sent by scanner">
-                <CopyBlock text={detail.data.request} />
+                <CopyBlock
+                  text={detail.data.request}
+                  curl={httpRequestToCurl(
+                    detail.data.request,
+                    detail.data.matched_at,
+                  )}
+                />
               </Section>
             )}
 
@@ -518,30 +524,113 @@ function hasAnyAttackField(d: FindingAttackDetails): boolean {
   );
 }
 
-function CopyBlock({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard?.writeText(text);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+function CopyBlock({ text, curl }: { text: string; curl?: string }) {
+  const [copied, setCopied] = useState<"text" | "curl" | null>(null);
+  const copy = (kind: "text" | "curl", payload: string) => {
+    navigator.clipboard?.writeText(payload);
+    setCopied(kind);
+    setTimeout(() => setCopied(null), 1500);
   };
   return (
     <div className="relative">
       <pre className="max-h-72 overflow-auto rounded-md bg-bg/80 p-3 pr-10 font-mono text-xs leading-relaxed text-slate-200">
         {text}
       </pre>
-      <button
-        onClick={copy}
-        className="absolute right-1.5 top-1.5 rounded p-1.5 text-slate-400 transition hover:bg-bg-elevated hover:text-white"
-        aria-label="Copy"
-        title="Copy"
-      >
-        {copied ? (
-          <Check className="h-3.5 w-3.5 text-emerald-400" />
-        ) : (
-          <Copy className="h-3.5 w-3.5" />
+      <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+        {curl && (
+          <button
+            onClick={() => copy("curl", curl)}
+            className="rounded px-1.5 py-1 text-[10px] font-mono uppercase text-slate-400 transition hover:bg-bg-elevated hover:text-white"
+            title="Copy as curl command"
+          >
+            {copied === "curl" ? "copied" : "curl"}
+          </button>
         )}
-      </button>
+        <button
+          onClick={() => copy("text", text)}
+          className="rounded p-1.5 text-slate-400 transition hover:bg-bg-elevated hover:text-white"
+          aria-label="Copy"
+          title="Copy raw"
+        >
+          {copied === "text" ? (
+            <Check className="h-3.5 w-3.5 text-emerald-400" />
+          ) : (
+            <Copy className="h-3.5 w-3.5" />
+          )}
+        </button>
+      </div>
     </div>
   );
+}
+
+/** Parse a raw HTTP request and emit a curl command.
+ *
+ * Best-effort: malformed requests fall back to a plain `curl <url>` using the
+ * matched URL hint. Headers like Host / Content-Length are skipped because
+ * curl emits them itself.
+ */
+function httpRequestToCurl(raw: string, urlHint: string | null): string {
+  const text = raw.replace(/\r\n/g, "\n").trimStart();
+  const headerEnd = text.indexOf("\n\n");
+  const headerSection = headerEnd === -1 ? text : text.slice(0, headerEnd);
+  const body = headerEnd === -1 ? "" : text.slice(headerEnd + 2);
+  const lines = headerSection.split("\n").filter((l) => l.length > 0);
+  if (lines.length === 0) {
+    return urlHint ? `curl ${shellQuote(urlHint)}` : "curl";
+  }
+  const requestLine = lines[0]!.split(/\s+/);
+  const method = requestLine[0] || "GET";
+  const path = requestLine[1] || "/";
+  const headerMap = new Map<string, string>();
+  const skip = new Set(["host", "content-length"]);
+  for (const line of lines.slice(1)) {
+    const idx = line.indexOf(":");
+    if (idx === -1) continue;
+    const key = line.slice(0, idx).trim();
+    const val = line.slice(idx + 1).trim();
+    if (skip.has(key.toLowerCase())) continue;
+    headerMap.set(key, val);
+  }
+  const hostHeader = lines
+    .slice(1)
+    .find((l) => l.toLowerCase().startsWith("host:"))
+    ?.slice(5)
+    .trim();
+  let url: string;
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    url = path;
+  } else if (hostHeader) {
+    const scheme = guessScheme(urlHint, hostHeader);
+    url = `${scheme}://${hostHeader}${path}`;
+  } else if (urlHint) {
+    try {
+      const u = new URL(urlHint);
+      url = `${u.protocol}//${u.host}${path}`;
+    } catch {
+      url = path;
+    }
+  } else {
+    url = path;
+  }
+  const parts: string[] = [`curl ${shellQuote(url)}`];
+  if (method !== "GET") parts.push(`  -X ${method}`);
+  for (const [k, v] of headerMap) {
+    parts.push(`  -H ${shellQuote(`${k}: ${v}`)}`);
+  }
+  if (body.trim().length > 0) {
+    parts.push(`  --data-raw ${shellQuote(body)}`);
+  }
+  return parts.join(" \\\n");
+}
+
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`;
+}
+
+function guessScheme(urlHint: string | null, host: string): string {
+  if (urlHint?.startsWith("https://")) return "https";
+  if (urlHint?.startsWith("http://")) return "http";
+  if (host.endsWith(":443")) return "https";
+  if (host.endsWith(":80")) return "http";
+  return "https"; // default to https — modern web is mostly TLS
 }

@@ -108,6 +108,7 @@ async def spawn_nuclei(
         "-o", str(out),
         "-silent",
         "-timeout", "10",
+        "-include-rr",  # bake raw request/response into the JSONL → powers HTTP replay UI
         *_profile_args(profile),
     ]
     if templates:

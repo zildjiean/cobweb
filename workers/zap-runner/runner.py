@@ -55,9 +55,28 @@ def _scrub(value: Any) -> Any:
     return value
 
 
-def _normalize_alert(alert: dict[str, Any]) -> dict[str, Any]:
+def _normalize_alert(
+    alert: dict[str, Any], message: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Normalize a ZAP alert dict into Cobweb's Finding shape.
+
+    `message` is the optional follow-up payload from /core/view/message — it
+    contains the raw HTTP request/response that triggered the alert. When
+    present we surface those for the HTTP replay UI; when absent (fetch
+    failed, or alert has no messageId) we fall back to evidence.
+    """
     alert = _scrub(alert)
     risk = alert.get("risk") or "Informational"
+    request_raw: str | None = None
+    response_raw: str | None = None
+    if message:
+        message = _scrub(message)
+        req_header = message.get("requestHeader") or ""
+        req_body = message.get("requestBody") or ""
+        request_raw = (req_header + (req_body or "")).strip() or None
+        resp_header = message.get("responseHeader") or ""
+        resp_body = message.get("responseBody") or ""
+        response_raw = (resp_header + (resp_body or "")).strip() or None
     return {
         "template_id": f"zap/{alert.get('pluginId', 'unknown')}",
         "name": alert.get("name") or "ZAP alert",
@@ -69,8 +88,8 @@ def _normalize_alert(alert: dict[str, Any]) -> dict[str, Any]:
         "cve": None,
         "cwe": str(alert.get("cweid")) if alert.get("cweid") else None,
         "cvss": None,
-        "request": None,
-        "response": alert.get("evidence"),
+        "request": request_raw,
+        "response": response_raw or alert.get("evidence"),
         "raw": alert,
     }
 
@@ -169,6 +188,15 @@ class ZapClient:
     async def alerts(self, target: str) -> list[dict[str, Any]]:
         body = await self._get("/JSON/core/view/alerts/", baseurl=target)
         return body.get("alerts") or []
+
+    async def message(self, message_id: str) -> dict[str, Any] | None:
+        """Fetch the full HTTP request/response for an alert's messageId.
+        Returns None on any error so a missing message never breaks streaming."""
+        try:
+            body = await self._get("/JSON/core/view/message/", id=message_id)
+        except (httpx.HTTPError, ValueError):
+            return None
+        return body.get("message")
 
 
 class ApiClient:
@@ -287,7 +315,9 @@ async def stream_alerts(
             if k in seen:
                 continue
             seen.add(k)
-            new_items.append(_normalize_alert(a))
+            msg_id = a.get("messageId")
+            message = await zap.message(str(msg_id)) if msg_id else None
+            new_items.append(_normalize_alert(a, message))
         if new_items:
             try:
                 await api.findings(scan_id, new_items)
