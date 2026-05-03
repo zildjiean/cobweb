@@ -19,6 +19,7 @@ import {
   X,
 } from "lucide-react";
 import { api, tokenStore } from "@/lib/api";
+import CommandPalette from "@/components/CommandPalette";
 import ReleaseNotesBell from "@/components/ReleaseNotesBell";
 import { CURRENT_VERSION } from "@/lib/release-notes";
 
@@ -222,6 +223,24 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </nav>
           </div>
           <div className="flex items-center gap-2 text-xs text-slate-400">
+            <button
+              type="button"
+              onClick={() => {
+                const ev = new KeyboardEvent("keydown", {
+                  key: "k",
+                  metaKey: true,
+                  bubbles: true,
+                });
+                window.dispatchEvent(ev);
+              }}
+              className="hidden items-center gap-1.5 rounded-md border border-border-subtle bg-bg/40 px-2 py-1 hover:border-border hover:text-slate-200 sm:inline-flex"
+              title="Open command palette (⌘K / Ctrl+K)"
+            >
+              <span>Search</span>
+              <kbd className="rounded bg-bg-elevated px-1 font-mono text-[10px] text-slate-500">
+                ⌘K
+              </kbd>
+            </button>
             <ReleaseNotesBell />
             <span className="hidden sm:inline">{me?.email}</span>
             {me?.role && (
@@ -233,6 +252,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </header>
         <main className="flex-1 p-4 md:p-6">{children}</main>
       </div>
+      <CommandPalette />
     </div>
   );
 }

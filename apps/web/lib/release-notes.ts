@@ -1,4 +1,4 @@
-export const CURRENT_VERSION = "0.1.0";
+export const CURRENT_VERSION = "0.3.0";
 
 export type Highlight = {
   label: string;
@@ -13,6 +13,48 @@ export type Release = {
 };
 
 export const RELEASES: Release[] = [
+  {
+    version: "0.3.0",
+    date: "2026-05-03",
+    title: "Reports, AI, and a polished UI",
+    highlights: [
+      {
+        label: "Professional report system",
+        detail:
+          "Five report kinds (executive, technical, OWASP Top 10, PCI-DSS 6.5, ISO 27001) — each with risk-grade card (A–F), severity donut, page numbers, and properly grouped findings. PDF export via WeasyPrint.",
+      },
+      {
+        label: "LLM integration",
+        detail:
+          "Per-org AI credentials (encrypted at rest) for OpenAI / OpenRouter / Anthropic. Powers finding translation and the new bulk compliance-mapping job (`make bulk-map`) that classifies template_ids into OWASP / PCI / ISO categories.",
+      },
+      {
+        label: "High scan profile",
+        detail:
+          "New profile between Quick and Full — runs CVE templates filtered to medium-or-higher severity. Solid middle ground when Quick misses too much and Full is overkill.",
+      },
+      {
+        label: "Observability stack",
+        detail:
+          "Prometheus + Grafana + cAdvisor + node-exporter shipped in docker-compose. Pre-built dashboards for API latency, scan throughput, container resources, and ZAP/worker health.",
+      },
+      {
+        label: "Command palette",
+        detail:
+          "Cmd/Ctrl+K opens a quick navigator across every page, target, scan, and admin action. No more menu hunting.",
+      },
+      {
+        label: "Design system + UI polish",
+        detail:
+          "Unified design tokens, refreshed admin pages, finding detail modal with markdown rendering, refined scan detail view, and many small polish passes across the dashboard.",
+      },
+      {
+        label: "ZAP tuning for bigger boxes",
+        detail:
+          "Memory limits and JVM heap retuned for hosts with more RAM — High and Full profiles now run reliably without OOM.",
+      },
+    ],
+  },
   {
     version: "0.1.0",
     date: "2026-05-01",

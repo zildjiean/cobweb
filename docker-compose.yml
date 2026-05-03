@@ -64,14 +64,13 @@ services:
 
   zap:
     image: zaproxy/zap-stable
-    # Cap JVM heap to keep dev workstations breathing — ZAP's zap.sh appends its
-    # own -Xmx based on container memory (default ≈75% of host on a 4GB box).
-    # `_JAVA_OPTIONS` is read by the JVM itself and overrides the command-line
-    # -Xmx, so it's the cleanest cross-image override.
+    # 16GB host: 4 GB heap, 6 GB container cap (~2 GB headroom for Firefox/DomXss
+    # spawns, see gotcha #3). `_JAVA_OPTIONS` is read by the JVM itself and
+    # overrides zap.sh's auto-calculated -Xmx (which would otherwise grab ~75%
+    # of container memory).
     environment:
-      _JAVA_OPTIONS: "-Xmx512m"
-    # Also cap the container so ZAP's auto-calc + Linux OOM killer agree.
-    mem_limit: 768m
+      _JAVA_OPTIONS: "-Xmx4g"
+    mem_limit: 6g
     command: >
       zap.sh -daemon -host 0.0.0.0 -port 8090
       -config api.key=cobweb-zap-dev-key
@@ -100,9 +99,99 @@ services:
       timeout: 5s
       retries: 20
 
+  # ─── Observability (infra-only scope) ─────────────────────────────────────
+  # Prometheus scrapes node-exporter (host metrics) + cAdvisor (container
+  # metrics). Grafana provisioned with Prometheus datasource + a Cobweb
+  # overview dashboard. App-level metrics (FastAPI, scan throughput) and log
+  # aggregation (Loki) are intentionally out of scope.
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    ports: ["9090:9090"]
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    # Port 3001 — 3000 is taken by Next.js. Default login admin/admin
+    # (Grafana forces password change on first login).
+    ports: ["3001:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_LOG_LEVEL: warn
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    # Reads /host/proc + /host/sys to expose true host CPU/RAM/disk/net even
+    # though the exporter itself runs in a docker network (no network_mode:
+    # host needed — --path.procfs makes the difference).
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/host'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.filesystem.fs-types-exclude=^(autofs|binfmt_misc|bpf|cgroup2?|configfs|debugfs|devpts|devtmpfs|fusectl|hugetlbfs|iso9660|mqueue|nsfs|overlay|proc|procfs|pstore|rpc_pipefs|securityfs|selinuxfs|squashfs|sysfs|tracefs)$$'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    ports: ["9100:9100"]
+    restart: unless-stopped
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:v0.52.1
+    # Port 8081 (8080 reserved). Ubuntu 24.04 / Docker 28 uses the new
+    # containerd image store, so cAdvisor's docker-via-layerdb path is empty.
+    # We point it at the containerd socket directly (namespace `moby` is what
+    # Docker uses) so metrics carry `name` + `image` labels.
+    # `--docker_only` filters out host-system cgroups (node-exporter has those).
+    ports: ["8081:8080"]
+    command:
+      - '--docker_only=true'
+      - '--containerd=/run/containerd/containerd.sock'
+      - '--containerd-namespace=moby'
+      - '--store_container_labels=false'
+      - '--whitelisted_container_labels=com.docker.compose.project,com.docker.compose.service'
+      - '--housekeeping_interval=15s'
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /run/containerd:/run/containerd:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    restart: unless-stopped
+
 volumes:
   pg_data:
   redis_data:
   rabbit_data:
   minio_data:
   os_data:
+  prometheus_data:
+  grafana_data:

@@ -9,6 +9,7 @@ import {
   Mail,
   Shield,
   ShieldCheck,
+  Sparkles,
   User,
 } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
@@ -111,6 +112,18 @@ export default function AdminPage() {
             <h3 className="text-sm font-semibold">Audit log</h3>
             <p className="text-[11px] text-slate-400">
               Hash-chained activity timeline
+            </p>
+          </Link>
+          <Link
+            href="/admin/llm"
+            className="card card-hover block"
+          >
+            <div className="mb-1.5 flex h-8 w-8 items-center justify-center rounded-md bg-emerald-500/15 text-emerald-300">
+              <Sparkles className="h-4 w-4" />
+            </div>
+            <h3 className="text-sm font-semibold">LLM translation</h3>
+            <p className="text-[11px] text-slate-400">
+              Provider, model, and Thai translation prompt
             </p>
           </Link>
         </div>

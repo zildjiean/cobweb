@@ -1,4 +1,4 @@
-.PHONY: help bootstrap dev-up dev-down register-admin logs status clean
+.PHONY: help bootstrap dev-up dev-down register-admin logs status clean bulk-map
 
 help:  ## Show this help
 	@awk 'BEGIN{FS=":.*##"; printf "Cobweb dev commands:\n\n"} /^[a-zA-Z_-]+:.*##/ { printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -37,3 +37,6 @@ status:  ## Show running pids + docker compose state
 clean:  ## Stop everything (host + docker) — keeps volumes
 	-./scripts/dev-down.sh
 	docker compose down
+
+bulk-map:  ## Classify finding templates → OWASP/PCI/ISO via LLM (one-shot)
+	cd apps/api && uv run python -m cobweb.scripts.bulk_compliance_map $(ARGS)

@@ -2,110 +2,538 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Cobweb scan report — {{ scan.id[:8] }}</title>
+<title>Cobweb · {{ report_title }} · {{ scan.id[:8] }}</title>
 <style>
-  @page { size: A4; margin: 18mm 18mm 22mm 18mm; }
-  body { font-family: -apple-system, "Segoe UI", Inter, sans-serif; color: #0f1c30; font-size: 11pt; }
-  h1 { color: #1a3aa3; margin: 0 0 4pt; }
-  h2 { color: #1a3aa3; border-bottom: 1px solid #ccd; padding-bottom: 4pt; margin-top: 18pt; }
-  .header { border-bottom: 3px solid #5b8def; padding-bottom: 10pt; margin-bottom: 16pt; }
-  .meta { font-size: 9pt; color: #555; }
-  .summary { display: flex; gap: 8pt; }
-  .summary .cell { flex: 1; border: 1px solid #ccd; border-radius: 4pt; padding: 6pt 8pt; text-align: center; }
+  @page {
+    size: A4;
+    margin: 18mm 18mm 22mm 18mm;
+    @bottom-left { content: "Cobweb · {{ org.name }}"; font-size: 8pt; color: #888; }
+    @bottom-right { content: "Page " counter(page) " of " counter(pages); font-size: 8pt; color: #888; }
+  }
+  @page :first { margin-top: 22mm; }
+
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", Inter, sans-serif;
+    color: #0f1c30;
+    font-size: 10.5pt;
+    line-height: 1.45;
+    margin: 0;
+  }
+  h1 { color: #1a3aa3; margin: 0 0 4pt; font-size: 22pt; letter-spacing: -0.01em; }
+  h2 { color: #1a3aa3; border-bottom: 1px solid #d4dae8; padding-bottom: 4pt; margin: 18pt 0 8pt; font-size: 14pt; }
+  h3 { color: #1a3aa3; margin: 12pt 0 4pt; font-size: 11.5pt; }
+  p { margin: 0 0 6pt; }
+  a { color: inherit; text-decoration: none; }
+
+  .header {
+    border-bottom: 3px solid #5b8def;
+    padding-bottom: 10pt;
+    margin-bottom: 14pt;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 14pt;
+  }
+  .header .brand-mark {
+    width: 28pt; height: 28pt; border-radius: 6pt;
+    background: linear-gradient(135deg, #5b8def 0%, #1a3aa3 100%);
+    color: white; font-weight: 800; font-size: 14pt;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .header .titles { flex: 1; min-width: 0; }
+  .header .org-name { font-size: 9pt; color: #555; text-transform: uppercase; letter-spacing: 0.06em; font-weight: 600; }
+  .header .subtitle { font-size: 10pt; color: #555; margin-top: 2pt; }
+  .meta { font-size: 8.5pt; color: #6b7488; margin-top: 6pt; }
+
+  /* Cover stats: grade + donut + counters */
+  .cover {
+    display: flex;
+    align-items: stretch;
+    gap: 12pt;
+    margin: 8pt 0 14pt;
+  }
+  .cover .grade-card {
+    width: 130pt;
+    text-align: center;
+    border: 1px solid #d4dae8;
+    border-radius: 6pt;
+    padding: 10pt 6pt;
+    flex-shrink: 0;
+  }
+  .cover .grade-card .grade-letter {
+    font-size: 56pt;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: -0.02em;
+  }
+  .cover .grade-card .grade-score {
+    font-size: 9pt;
+    color: #555;
+    margin-top: 4pt;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .cover .donut-card {
+    flex: 1;
+    border: 1px solid #d4dae8;
+    border-radius: 6pt;
+    padding: 8pt 10pt;
+    display: flex;
+    align-items: center;
+    gap: 12pt;
+  }
+  .cover .donut-card .label {
+    font-size: 8pt;
+    color: #6b7488;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    margin-bottom: 4pt;
+  }
+  .cover .donut-card .total-num {
+    font-size: 28pt;
+    font-weight: 700;
+    color: #1a3aa3;
+    line-height: 1;
+  }
+  .cover .donut-card .total-sub { font-size: 9pt; color: #6b7488; margin-top: 2pt; }
+  .cover .donut-svg { width: 80pt; height: 80pt; flex-shrink: 0; }
+  .cover .legend { font-size: 8.5pt; flex: 1; }
+  .cover .legend .row {
+    display: flex;
+    justify-content: space-between;
+    padding: 1.5pt 0;
+    border-bottom: 1px dashed #e5e9f2;
+  }
+  .cover .legend .row:last-child { border-bottom: none; }
+  .cover .legend .swatch {
+    display: inline-block;
+    width: 7pt; height: 7pt;
+    border-radius: 2pt;
+    margin-right: 5pt;
+    vertical-align: middle;
+  }
+  .cover .legend .pct { color: #6b7488; font-variant-numeric: tabular-nums; }
+
+  .summary-row {
+    display: flex; gap: 6pt; margin: 6pt 0 10pt;
+  }
+  .summary-row .cell {
+    flex: 1; border: 1px solid #d4dae8; border-radius: 4pt;
+    padding: 6pt 4pt; text-align: center;
+  }
+  .summary-row .cell .num { font-size: 16pt; font-weight: 700; line-height: 1.1; }
+  .summary-row .cell .lbl { font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2pt; }
+
   .sev-critical { color: #c01515; }
   .sev-high { color: #d96118; }
   .sev-medium { color: #c08a0a; }
   .sev-low { color: #2c8a3a; }
-  .sev-info { color: #555; }
-  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 6pt; }
-  th { background: #f3f5fc; text-align: left; padding: 5pt 6pt; border-bottom: 1px solid #ccd; }
+  .sev-info { color: #5a6678; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 9.5pt; margin-top: 4pt; }
+  th { background: #f3f5fc; text-align: left; padding: 5pt 6pt; border-bottom: 1px solid #ccd; font-weight: 600; }
   td { padding: 5pt 6pt; vertical-align: top; border-bottom: 1px solid #eef; }
-  td.tpl { font-family: "Menlo", monospace; font-size: 8.5pt; color: #333; }
-  .pill { display: inline-block; padding: 2pt 5pt; border-radius: 3pt; font-size: 8.5pt; font-weight: 600; }
+  td.tpl, .mono { font-family: "Menlo", "Consolas", monospace; font-size: 8.5pt; color: #333; }
+
+  .pill {
+    display: inline-block; padding: 1.5pt 5pt; border-radius: 3pt;
+    font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+  }
   .pill-critical { background: #ffd9d9; color: #8a0a0a; }
   .pill-high { background: #ffe1c8; color: #7a3a00; }
   .pill-medium { background: #fff3c4; color: #6e530b; }
   .pill-low { background: #cdebd1; color: #1c5728; }
   .pill-info { background: #e7e9f1; color: #404655; }
-  .compliance ul { margin: 0; padding-left: 14pt; font-size: 9pt; }
-  footer { position: fixed; bottom: 6mm; left: 0; right: 0; text-align: center; font-size: 8pt; color: #888; }
+  .badge-cve {
+    display: inline-block; padding: 1pt 4pt; border-radius: 2pt;
+    background: #1a3aa3; color: white; font-size: 7.5pt; font-weight: 600;
+    font-family: "Menlo", monospace;
+  }
+  .badge-cwe {
+    display: inline-block; padding: 1pt 4pt; border-radius: 2pt;
+    background: #6b7488; color: white; font-size: 7.5pt; font-weight: 600;
+    font-family: "Menlo", monospace;
+  }
+  .badge-cvss {
+    display: inline-block; padding: 1pt 4pt; border-radius: 2pt;
+    background: #e7e9f1; color: #1a3aa3; font-size: 7.5pt; font-weight: 600;
+    font-family: "Menlo", monospace;
+  }
+
+  /* Technical: per-finding card */
+  .finding {
+    border: 1px solid #d4dae8;
+    border-left: 3pt solid #1a3aa3;
+    border-radius: 4pt;
+    padding: 8pt 10pt;
+    margin: 6pt 0;
+    page-break-inside: avoid;
+  }
+  .finding.sev-critical { border-left-color: #c01515; }
+  .finding.sev-high { border-left-color: #d96118; }
+  .finding.sev-medium { border-left-color: #c08a0a; }
+  .finding.sev-low { border-left-color: #2c8a3a; }
+  .finding.sev-info { border-left-color: #5a6678; }
+  .finding .row1 { display: flex; gap: 6pt; align-items: center; margin-bottom: 3pt; flex-wrap: wrap; }
+  .finding .name { font-weight: 700; font-size: 11pt; flex: 1; min-width: 0; }
+  .finding .meta-row { font-size: 8.5pt; color: #6b7488; margin-bottom: 4pt; }
+  .finding .field { margin: 4pt 0 0; }
+  .finding .field-label {
+    font-size: 7.5pt; text-transform: uppercase; letter-spacing: 0.06em;
+    color: #6b7488; font-weight: 600;
+  }
+  .finding .field-value { font-size: 9.5pt; margin-top: 1pt; }
+
+  /* Group section (compliance kinds) */
+  .group {
+    border: 1px solid #d4dae8;
+    border-radius: 4pt;
+    margin: 6pt 0;
+    overflow: hidden;
+    page-break-inside: avoid;
+  }
+  .group .group-header {
+    background: #f3f5fc;
+    padding: 6pt 10pt;
+    border-bottom: 1px solid #d4dae8;
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .group .group-id {
+    font-family: "Menlo", monospace; font-size: 9.5pt;
+    color: #1a3aa3; font-weight: 700;
+  }
+  .group .group-label { flex: 1; padding-left: 8pt; font-size: 10pt; }
+  .group .group-count {
+    font-size: 9pt; color: #6b7488;
+    font-variant-numeric: tabular-nums;
+  }
+  .group .group-body { padding: 4pt 0; }
+  .group table { margin: 0; font-size: 9pt; }
+  .group td, .group th { padding: 3.5pt 10pt; }
+
+  /* Executive: top finding excerpt */
+  .top-finding {
+    border-left: 3pt solid #1a3aa3;
+    padding: 4pt 8pt;
+    margin: 6pt 0;
+    page-break-inside: avoid;
+  }
+  .top-finding.sev-critical { border-left-color: #c01515; }
+  .top-finding.sev-high { border-left-color: #d96118; }
+  .top-finding.sev-medium { border-left-color: #c08a0a; }
+  .top-finding.sev-low { border-left-color: #2c8a3a; }
+  .top-finding.sev-info { border-left-color: #5a6678; }
+  .top-finding .name { font-weight: 700; font-size: 10.5pt; }
+  .top-finding .desc { font-size: 9.5pt; color: #333; margin-top: 2pt; }
+
+  .empty {
+    text-align: center; color: #6b7488; font-size: 9pt;
+    padding: 18pt; border: 1px dashed #d4dae8; border-radius: 4pt;
+  }
+
+  .scope-box {
+    background: #f3f5fc; border: 1px solid #d4dae8; border-radius: 4pt;
+    padding: 8pt 10pt; margin: 6pt 0;
+    font-size: 9.5pt;
+  }
+  .scope-box dt { font-weight: 600; color: #6b7488; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4pt; }
+  .scope-box dt:first-child { margin-top: 0; }
+  .scope-box dd { margin: 0 0 2pt; }
 </style>
 </head>
 <body>
 
 <div class="header">
-  <h1>{{ report_title }}</h1>
-  <div class="meta">
-    Generated {{ generated_at }} · Cobweb DAST Platform · Scan {{ scan.id }}
+  <div class="brand-mark">C</div>
+  <div class="titles">
+    <div class="org-name">{{ org.name }}</div>
+    <h1>{{ report_title }}</h1>
+    {% if report_subtitle %}<div class="subtitle">{{ report_subtitle }}</div>{% endif %}
+  </div>
+  <div class="meta" style="text-align: right;">
+    Generated {{ generated_at }}<br>
+    Scan <span class="mono">{{ scan.id[:8] }}</span>
   </div>
 </div>
 
-<h2>Executive summary</h2>
+{# ───── Cover stats: risk grade + donut + counters (all kinds) ───── #}
+<div class="cover">
+  <div class="grade-card">
+    <div class="grade-letter" style="color: {{ risk_grade_color }};">{{ risk_grade }}</div>
+    <div class="grade-score">Score {{ risk_score }}/100</div>
+  </div>
+  <div class="donut-card">
+    {% if donut %}
+    <svg class="donut-svg" viewBox="0 0 36 36" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="18" cy="18" r="15.915" fill="none" stroke="#eef0f6" stroke-width="4"/>
+      {% for s in donut %}
+      <circle cx="18" cy="18" r="15.915" fill="none"
+              stroke="{{ s.color }}" stroke-width="4"
+              stroke-dasharray="{{ s.dasharray }}"
+              stroke-dashoffset="{{ s.offset }}"
+              pathLength="100"
+              transform="rotate(-90 18 18)"/>
+      {% endfor %}
+      <text x="18" y="18" text-anchor="middle" dominant-baseline="central"
+            font-size="9" font-weight="700" fill="#1a3aa3">{{ total_findings }}</text>
+    </svg>
+    {% else %}
+    <div style="width:80pt;height:80pt;display:flex;align-items:center;justify-content:center;color:#6b7488;font-size:8.5pt;border:1px dashed #d4dae8;border-radius:50%;">no findings</div>
+    {% endif %}
+    <div class="legend">
+      <div class="label">Findings by severity</div>
+      {% for sev in sev_order %}
+      {% if summary[sev] %}
+      <div class="row">
+        <span><span class="swatch" style="background: {{ sev_colors[sev] }};"></span><span class="sev-{{ sev }}">{{ sev }}</span></span>
+        <span class="pct mono">{{ summary[sev] }}</span>
+      </div>
+      {% endif %}
+      {% endfor %}
+      {% if total_findings == 0 %}<div class="row"><span style="color:#6b7488;">No findings detected.</span></div>{% endif %}
+    </div>
+  </div>
+</div>
+
+{# ───── Scan scope (all kinds) ───── #}
+<div class="scope-box">
+  <dl style="margin:0;">
+    <dt>Target</dt>
+    <dd><strong>{{ target.name }}</strong> · <span class="mono">{{ target.base_url }}</span></dd>
+    <dt>Engine / Profile</dt>
+    <dd>{{ scan.engine|upper }} · <strong>{{ scan.profile }}</strong> profile</dd>
+    <dt>Status</dt>
+    <dd>{{ scan.status }}{% if scan.finished_at %} · finished {{ scan.finished_at }}{% endif %}</dd>
+  </dl>
+</div>
+
+{# ════════════════════════════════════════════════════════════════════ #}
+{# EXECUTIVE: 1-page leadership summary, top 5 findings, no full table  #}
+{# ════════════════════════════════════════════════════════════════════ #}
+{% if kind == "executive" %}
+
+<h2>Risk overview</h2>
 <p>
-  Target <strong>{{ target.base_url }}</strong> was scanned with the
-  <strong>{{ scan.engine }}</strong> engine using the
-  <strong>{{ scan.profile }}</strong> profile.
-  The scan {{ scan.status }} with <strong>{{ findings|length }}</strong> finding(s).
+  This dynamic application security test of <strong>{{ target.name }}</strong>
+  identified <strong>{{ total_findings }}</strong> issue(s).
+  The asset is graded
+  <strong style="color: {{ risk_grade_color }};">{{ risk_grade }}</strong>
+  ({{ risk_score }}/100) based on a severity-weighted scoring model
+  (critical=10, high=5, medium=2, low=0.5).
 </p>
 
-<div class="summary">
-  {% for sev in ["critical", "high", "medium", "low", "info"] %}
-  <div class="cell">
-    <div style="font-size: 18pt; font-weight: 700;" class="sev-{{ sev }}">
-      {{ summary.get(sev, 0) }}
-    </div>
-    <div style="text-transform: uppercase; font-size: 8pt;" class="sev-{{ sev }}">{{ sev }}</div>
-  </div>
-  {% endfor %}
-</div>
-
-<h2>Findings</h2>
-<table>
-  <thead>
-    <tr>
-      <th>Severity</th><th>Template</th><th>Name</th><th>Matched at</th>
-    </tr>
-  </thead>
-  <tbody>
-  {% for f in findings %}
-    <tr>
-      <td><span class="pill pill-{{ f.severity }}">{{ f.severity }}</span></td>
-      <td class="tpl">{{ f.template_id }}</td>
-      <td>{{ f.name }}</td>
-      <td class="tpl">{{ f.matched_at }}</td>
-    </tr>
-  {% endfor %}
-  {% if not findings %}
-    <tr><td colspan="4" style="text-align:center; color:#777;">No findings.</td></tr>
-  {% endif %}
-  </tbody>
-</table>
-
-{% if compliance %}
-<h2>Compliance mapping</h2>
-<table class="compliance">
-  <thead>
-    <tr><th>Finding</th><th>OWASP Top 10</th><th>PCI-DSS 6.5</th><th>ISO 27001 A.</th></tr>
-  </thead>
-  <tbody>
-  {% for row in compliance %}
-    <tr>
-      <td>{{ row.name }}</td>
-      <td>{% if row.owasp %}{{ row.owasp[0] }} — {{ row.owasp[1] }}{% else %}—{% endif %}</td>
-      <td>
-        <ul>{% for r in row.pci %}<li>{{ r[0] }} {{ r[1] }}</li>{% endfor %}</ul>
-        {% if not row.pci %}—{% endif %}
-      </td>
-      <td>
-        <ul>{% for c in row.iso %}<li>{{ c[0] }} {{ c[1] }}</li>{% endfor %}</ul>
-        {% if not row.iso %}—{% endif %}
-      </td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
+{% if summary.critical or summary.high %}
+<p>
+  Of immediate concern:
+  {% if summary.critical %}<strong class="sev-critical">{{ summary.critical }} critical</strong>{% endif %}
+  {% if summary.critical and summary.high %} and {% endif %}
+  {% if summary.high %}<strong class="sev-high">{{ summary.high }} high</strong>{% endif %}
+  severity findings should be addressed before the next release cycle.
+</p>
+{% else %}
+<p>No critical or high-severity findings were identified in this scan.</p>
 {% endif %}
 
-<footer>Cobweb · {{ generated_at }}</footer>
+{% if top_findings %}
+<h2>Top findings</h2>
+<p style="font-size:9pt;color:#6b7488;">Highest-severity issues, sorted by impact.</p>
+{% for f in top_findings %}
+<div class="top-finding sev-{{ f.severity }}">
+  <div>
+    <span class="pill pill-{{ f.severity }}">{{ f.severity }}</span>
+    <span class="name">{{ f.name }}</span>
+  </div>
+  {% if f.description %}<div class="desc">{{ f.description[:280] }}{% if f.description|length > 280 %}…{% endif %}</div>{% endif %}
+  <div class="meta-row mono" style="margin-top:3pt;">
+    {{ f.template_id }}{% if f.cve %} · <span class="badge-cve">{{ f.cve }}</span>{% endif %}{% if f.cvss %} · <span class="badge-cvss">CVSS {{ f.cvss }}</span>{% endif %}
+  </div>
+</div>
+{% endfor %}
+{% endif %}
+
+<h2>Recommended next steps</h2>
+<ol style="font-size:9.5pt;">
+  {% if summary.critical %}<li>Triage and remediate {{ summary.critical }} critical-severity finding(s) immediately.</li>{% endif %}
+  {% if summary.high %}<li>Schedule fix windows for {{ summary.high }} high-severity finding(s).</li>{% endif %}
+  {% if summary.medium %}<li>Plan remediation of {{ summary.medium }} medium-severity finding(s) in the upcoming release.</li>{% endif %}
+  <li>Run a follow-up scan after fixes to confirm closure.</li>
+  <li>Review the technical report for per-finding payloads and remediation guidance.</li>
+</ol>
+
+{% endif %}
+
+{# ════════════════════════════════════════════════════════════════════ #}
+{# TECHNICAL: per-finding cards with description, remediation, CVE/CWE  #}
+{# ════════════════════════════════════════════════════════════════════ #}
+{% if kind == "technical" %}
+
+<h2>Findings ({{ total_findings }})</h2>
+
+{% if not findings %}
+<div class="empty">No findings recorded for this scan.</div>
+{% endif %}
+
+{% for f in findings %}
+<div class="finding sev-{{ f.severity }}">
+  <div class="row1">
+    <span class="pill pill-{{ f.severity }}">{{ f.severity }}</span>
+    <span class="name">{{ f.name }}</span>
+  </div>
+  <div class="meta-row mono">
+    {{ f.template_id }}
+    {% if f.matcher_name %} · matcher <em>{{ f.matcher_name }}</em>{% endif %}
+    {% if f.cve %} · <span class="badge-cve">{{ f.cve }}</span>{% endif %}
+    {% if f.cwe %} · <span class="badge-cwe">{{ f.cwe }}</span>{% endif %}
+    {% if f.cvss %} · <span class="badge-cvss">CVSS {{ f.cvss }}</span>{% endif %}
+  </div>
+
+  {% if f.description %}
+  <div class="field">
+    <div class="field-label">Description</div>
+    <div class="field-value">{{ f.description }}</div>
+  </div>
+  {% endif %}
+
+  {% if f.remediation %}
+  <div class="field">
+    <div class="field-label">Remediation</div>
+    <div class="field-value">{{ f.remediation }}</div>
+  </div>
+  {% endif %}
+
+  <div class="field">
+    <div class="field-label">Matched at</div>
+    <div class="field-value mono">{{ f.matched_at }}</div>
+  </div>
+</div>
+{% endfor %}
+
+{% endif %}
+
+{# ════════════════════════════════════════════════════════════════════ #}
+{# OWASP: groups by category                                            #}
+{# ════════════════════════════════════════════════════════════════════ #}
+{% if kind == "owasp" %}
+
+<h2>OWASP Top 10 (2021) coverage</h2>
+<p style="font-size:9pt;color:#6b7488;">
+  Findings grouped by OWASP Top 10 category based on Nuclei template tags.
+</p>
+
+{% if not owasp_groups %}
+<div class="empty">No findings to map.</div>
+{% endif %}
+
+{% for g in owasp_groups %}
+<div class="group">
+  <div class="group-header">
+    <span class="group-id">{{ g.id }}</span>
+    <span class="group-label">{{ g.label }}</span>
+    <span class="group-count">{{ g.findings|length }} finding(s)</span>
+  </div>
+  <div class="group-body">
+    <table>
+      <thead><tr><th style="width:60pt;">Severity</th><th>Finding</th><th style="width:140pt;">Template</th></tr></thead>
+      <tbody>
+        {% for f in g.findings %}
+        <tr>
+          <td><span class="pill pill-{{ f.severity }}">{{ f.severity }}</span></td>
+          <td>{{ f.name }}</td>
+          <td class="mono">{{ f.template_id }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% endif %}
+
+{# ════════════════════════════════════════════════════════════════════ #}
+{# PCI-DSS: groups by Requirement 6.5.x                                 #}
+{# ════════════════════════════════════════════════════════════════════ #}
+{% if kind == "pci_dss" %}
+
+<h2>PCI-DSS Requirement 6.5</h2>
+<p style="font-size:9pt;color:#6b7488;">
+  Findings grouped by PCI-DSS Requirement 6.5.x.
+  Note: a finding may map to multiple requirements and appear in more than one group.
+</p>
+
+{% if not pci_groups %}
+<div class="empty">No findings to map.</div>
+{% endif %}
+
+{% for g in pci_groups %}
+<div class="group">
+  <div class="group-header">
+    <span class="group-id">{{ g.id }}</span>
+    <span class="group-label">{{ g.label }}</span>
+    <span class="group-count">{{ g.findings|length }} finding(s)</span>
+  </div>
+  <div class="group-body">
+    <table>
+      <thead><tr><th style="width:60pt;">Severity</th><th>Finding</th><th style="width:140pt;">Template</th></tr></thead>
+      <tbody>
+        {% for f in g.findings %}
+        <tr>
+          <td><span class="pill pill-{{ f.severity }}">{{ f.severity }}</span></td>
+          <td>{{ f.name }}</td>
+          <td class="mono">{{ f.template_id }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% endif %}
+
+{# ════════════════════════════════════════════════════════════════════ #}
+{# ISO 27001: groups by Annex A control                                 #}
+{# ════════════════════════════════════════════════════════════════════ #}
+{% if kind == "iso27001" %}
+
+<h2>ISO 27001:2022 Annex A controls</h2>
+<p style="font-size:9pt;color:#6b7488;">
+  Findings grouped by Annex A control.
+  Note: a finding may map to multiple controls and appear in more than one group.
+</p>
+
+{% if not iso_groups %}
+<div class="empty">No findings to map.</div>
+{% endif %}
+
+{% for g in iso_groups %}
+<div class="group">
+  <div class="group-header">
+    <span class="group-id">{{ g.id }}</span>
+    <span class="group-label">{{ g.label }}</span>
+    <span class="group-count">{{ g.findings|length }} finding(s)</span>
+  </div>
+  <div class="group-body">
+    <table>
+      <thead><tr><th style="width:60pt;">Severity</th><th>Finding</th><th style="width:140pt;">Template</th></tr></thead>
+      <tbody>
+        {% for f in g.findings %}
+        <tr>
+          <td><span class="pill pill-{{ f.severity }}">{{ f.severity }}</span></td>
+          <td>{{ f.name }}</td>
+          <td class="mono">{{ f.template_id }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endfor %}
+
+{% endif %}
+
 </body>
 </html>

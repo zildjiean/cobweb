@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Plus, ScanLine, Search, Square, Trash2, X } from "lucide-react";
 import { api, ApiError } from "@/lib/api";
@@ -46,6 +47,7 @@ const STATUSES = ["queued", "running", "completed", "failed", "cancelled"];
 export default function ScansPage() {
   const qc = useQueryClient();
   const toast = useToast();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [targetId, setTargetId] = useState("");
   const [profile, setProfile] = useState("quick");
@@ -82,11 +84,18 @@ export default function ScansPage() {
         method: "POST",
         body: JSON.stringify(body),
       }),
-    onSuccess: () => {
+    onSuccess: (newScan) => {
       qc.invalidateQueries({ queryKey: ["scans"] });
       setOpen(false);
       setTargetId("");
-      toast.push({ kind: "success", title: "Scan queued" });
+      toast.push({
+        kind: "success",
+        title: "Scan queued",
+        description: "Opening live view…",
+      });
+      // Jump straight to detail so the user sees the scan they just triggered,
+      // bypassing any active filter on the list page.
+      router.push(`/scans/${newScan.id}`);
     },
     onError: (err) => {
       toast.push({

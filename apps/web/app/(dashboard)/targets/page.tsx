@@ -337,7 +337,7 @@ function TargetCard({
               </span>
               <p className="text-slate-300">
                 Or paste this <code className="text-accent">&lt;meta&gt;</code> tag
-                into your homepage's <code>&lt;head&gt;</code>:
+                into your homepage&apos;s <code>&lt;head&gt;</code>:
               </p>
               <CopyableCode
                 text={`<meta name="cobweb-site-verification" content="${target.verification_token}">`}

@@ -6,9 +6,27 @@ maintain a vetted ruleset per regulation.
 OWASP Top 10 (2021) categories
 PCI-DSS Requirement 6.5
 ISO 27001 Annex A controls (subset)
+
+Lookup precedence:
+  1. LLM-generated full template_id matches (compliance_map_llm.py — populated
+     by `make bulk-map`). Tries the full id first, then the head segment.
+  2. Curated prefix match against the static dicts below (head segment only).
+  3. Curated substring match (handles e.g. nuclei templates that embed a known
+     prefix mid-path).
 """
 
 from __future__ import annotations
+
+try:
+    from cobweb.services.report_templates.compliance_map_llm import (
+        LLM_TEMPLATE_TO_ISO,
+        LLM_TEMPLATE_TO_OWASP,
+        LLM_TEMPLATE_TO_PCI,
+    )
+except ImportError:  # the generated file is optional — empty fallback keeps imports safe
+    LLM_TEMPLATE_TO_OWASP = {}
+    LLM_TEMPLATE_TO_PCI = {}
+    LLM_TEMPLATE_TO_ISO = {}
 
 OWASP_TOP_10 = {
     "A01:2021": "Broken Access Control",
@@ -44,6 +62,10 @@ TEMPLATE_TO_OWASP: dict[str, str] = {
 
 def owasp_category(template_id: str) -> tuple[str, str] | None:
     """Returns (id, label) tuple, or None if no match."""
+    if template_id in LLM_TEMPLATE_TO_OWASP:
+        oid = LLM_TEMPLATE_TO_OWASP[template_id]
+        if oid in OWASP_TOP_10:
+            return oid, OWASP_TOP_10[oid]
     head = template_id.split("/", 1)[0].lower()
     if head in TEMPLATE_TO_OWASP:
         oid = TEMPLATE_TO_OWASP[head]
@@ -80,8 +102,11 @@ TEMPLATE_TO_PCI: dict[str, list[str]] = {
 
 
 def pci_dss(template_id: str) -> list[tuple[str, str]]:
-    head = template_id.split("/", 1)[0].lower()
-    items = TEMPLATE_TO_PCI.get(head, [])
+    if template_id in LLM_TEMPLATE_TO_PCI:
+        items = LLM_TEMPLATE_TO_PCI[template_id]
+    else:
+        head = template_id.split("/", 1)[0].lower()
+        items = TEMPLATE_TO_PCI.get(head, [])
     return [(req, PCI_DSS_6_5[req]) for req in items if req in PCI_DSS_6_5]
 
 
@@ -107,6 +132,9 @@ TEMPLATE_TO_ISO: dict[str, list[str]] = {
 
 
 def iso_27001(template_id: str) -> list[tuple[str, str]]:
-    head = template_id.split("/", 1)[0].lower()
-    items = TEMPLATE_TO_ISO.get(head, [])
+    if template_id in LLM_TEMPLATE_TO_ISO:
+        items = LLM_TEMPLATE_TO_ISO[template_id]
+    else:
+        head = template_id.split("/", 1)[0].lower()
+        items = TEMPLATE_TO_ISO.get(head, [])
     return [(c, ISO_27001_CONTROLS[c]) for c in items if c in ISO_27001_CONTROLS]

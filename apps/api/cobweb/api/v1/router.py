@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from cobweb.api.v1 import (
-    audit, auth, notifications, projects, reports, scans, tokens, vulnerabilities, ws,
+    audit, auth, llm, notifications, projects, reports, scans, tokens, vulnerabilities, ws,
 )
 
 api_router = APIRouter(prefix="/api/v1")
@@ -13,4 +13,5 @@ api_router.include_router(reports.router)
 api_router.include_router(audit.router)
 api_router.include_router(tokens.router)
 api_router.include_router(notifications.router)
+api_router.include_router(llm.router)
 api_router.include_router(ws.router)

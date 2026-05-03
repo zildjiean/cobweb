@@ -19,6 +19,7 @@ class ScanStatus(str, enum.Enum):
 
 class ScanProfile(str, enum.Enum):
     QUICK = "quick"
+    HIGH = "high"
     FULL = "full"
     CUSTOM = "custom"
 

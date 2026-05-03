@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,7 @@ from cobweb.db.base import get_db
 from cobweb.models.project import Project
 from cobweb.models.scan import Finding, Scan, ScanProfile, ScanStatus, Severity
 from cobweb.schemas.scan import (
+    FindingAttackDetails,
     FindingBulkDelete,
     FindingBulkDeleteResponse,
     FindingDetailResponse,
@@ -284,6 +287,64 @@ async def bulk_delete_findings(
     return FindingBulkDeleteResponse(deleted=len(findings), summary=summary)
 
 
+_ZAP_RESERVED = {
+    "alert", "name", "description", "solution", "reference", "risk",
+    "confidence", "method", "param", "attack", "evidence", "inputVector",
+    "url", "uri", "tags", "id", "alertRef", "pluginId", "messageId",
+    "sourceMessageId", "sourceid", "nodeName", "other", "cweid", "wascid",
+}
+_NUCLEI_RESERVED = {
+    "template-id", "templateID", "info", "matched-at", "host", "matcher-name",
+    "request", "response", "type", "ip", "timestamp", "curl-command",
+}
+
+
+def _extract_attack_details(f: Finding) -> FindingAttackDetails | None:
+    """Pull forensic fields out of a finding's raw payload — engine-aware."""
+    raw = f.raw or {}
+    if not raw:
+        return None
+    # ZAP alert shape: presence of pluginId or alertRef
+    if "pluginId" in raw or "alertRef" in raw:
+        extras = {k: v for k, v in raw.items() if k not in _ZAP_RESERVED and v not in (None, "", {}, [])}
+        return FindingAttackDetails(
+            method=raw.get("method") or None,
+            parameter=raw.get("param") or None,
+            payload=raw.get("attack") or None,
+            evidence=raw.get("evidence") or None,
+            input_vector=raw.get("inputVector") or None,
+            confidence=raw.get("confidence") or None,
+            extra=extras,
+        )
+    # Nuclei shape: has template-id and info dict
+    if "template-id" in raw or "templateID" in raw or "info" in raw:
+        info = raw.get("info") or {}
+        request = raw.get("request") or ""
+        method = None
+        if isinstance(request, str) and request:
+            first_line = request.splitlines()[0] if request else ""
+            head = first_line.split(" ", 1)[0]
+            if head in {"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"}:
+                method = head
+        extra: dict[str, Any] = {}
+        for key in ("matcher-status", "extracted-results", "type", "ip", "curl-command"):
+            v = raw.get(key)
+            if v not in (None, "", [], {}):
+                extra[key] = v
+        if info.get("severity"):
+            extra["severity_raw"] = info.get("severity")
+        return FindingAttackDetails(
+            method=method,
+            parameter=raw.get("matcher-name") or None,
+            payload=raw.get("matched-line") or info.get("metadata", {}).get("payload") if isinstance(info.get("metadata"), dict) else None,
+            evidence=raw.get("matched-line") or None,
+            input_vector=raw.get("type") or None,
+            confidence=None,
+            extra=extra,
+        )
+    return None
+
+
 def _finding_detail_out(f: Finding) -> FindingDetailResponse:
     return FindingDetailResponse(
         id=f.id,
@@ -304,6 +365,7 @@ def _finding_detail_out(f: Finding) -> FindingDetailResponse:
         request=f.request,
         response=f.response,
         raw=f.raw or {},
+        attack_details=_extract_attack_details(f),
     )
 
 

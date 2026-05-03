@@ -81,7 +81,7 @@ export default function ReleaseNotesBell() {
           <div className="flex items-center justify-between border-b border-border-subtle bg-gradient-to-r from-accent/10 to-transparent px-4 py-3">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-accent" />
-              <h3 className="text-sm font-semibold">What's new</h3>
+              <h3 className="text-sm font-semibold">What&apos;s new</h3>
               <span className="badge border border-accent/30 bg-accent/10 text-accent">
                 v{CURRENT_VERSION}
               </span>

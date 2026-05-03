@@ -1,6 +1,6 @@
 [project]
 name = "cobweb-cli"
-version = "0.1.0"
+version = "0.3.0"
 description = "Cobweb DAST scanner CLI for CI/CD"
 requires-python = ">=3.10"
 dependencies = [

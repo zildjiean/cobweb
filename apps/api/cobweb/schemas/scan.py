@@ -7,7 +7,7 @@ from pydantic import BaseModel, Field
 
 class ScanCreate(BaseModel):
     target_id: str
-    profile: Literal["quick", "full", "custom"] = "quick"
+    profile: Literal["quick", "high", "full", "custom"] = "quick"
     engine: Literal["nuclei", "zap"] = "nuclei"
     config: dict[str, Any] = Field(default_factory=dict)
 
@@ -70,6 +70,18 @@ class FindingResponse(BaseModel):
     created_at: str
 
 
+class FindingAttackDetails(BaseModel):
+    """Forensic fields extracted from a finding's raw payload — what was sent, where, and what came back."""
+
+    method: str | None = None
+    parameter: str | None = None
+    payload: str | None = None
+    evidence: str | None = None
+    input_vector: str | None = None
+    confidence: str | None = None
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
 class FindingDetailResponse(FindingResponse):
     """Full finding payload — includes request/response/raw for the issue detail view."""
 
@@ -78,6 +90,7 @@ class FindingDetailResponse(FindingResponse):
     request: str | None = None
     response: str | None = None
     raw: dict[str, Any] = Field(default_factory=dict)
+    attack_details: FindingAttackDetails | None = None
 
 
 class FindingBulkDelete(BaseModel):

@@ -215,10 +215,6 @@ export default function ReportsPage() {
         </table>
       </div>
 
-      <p className="mt-4 text-[11px] text-slate-500">
-        PDF generation requires WeasyPrint system libraries (Pango/Cairo). HTML
-        export works without them.
-      </p>
     </div>
   );
 }

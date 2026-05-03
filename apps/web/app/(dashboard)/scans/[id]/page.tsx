@@ -5,10 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlignJustify,
   ArrowLeft,
+  ChevronDown,
+  ChevronRight,
   Clock,
   ExternalLink,
+  Globe,
+  Layers,
+  List,
   Radio,
+  Rows3,
+  Search,
   Activity,
   Square,
   Trash2,
@@ -92,6 +100,26 @@ export default function ScanDetailPage({
   const [pendingFindingDelete, setPendingFindingDelete] = useState<
     Finding[] | null
   >(null);
+  const [groupBy, setGroupBy] = useState<"none" | "issue" | "url">(() => {
+    if (typeof window === "undefined") return "none";
+    const v = window.localStorage.getItem("cobweb.findings.groupBy");
+    return v === "issue" || v === "url" ? v : "none";
+  });
+  const [density, setDensity] = useState<"comfortable" | "compact">(() => {
+    if (typeof window === "undefined") return "comfortable";
+    const v = window.localStorage.getItem("cobweb.findings.density");
+    return v === "compact" ? "compact" : "comfortable";
+  });
+  const [search, setSearch] = useState<string>("");
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    window.localStorage.setItem("cobweb.findings.groupBy", groupBy);
+    setExpanded(new Set());
+  }, [groupBy]);
+  useEffect(() => {
+    window.localStorage.setItem("cobweb.findings.density", density);
+  }, [density]);
   const wsRef = useRef<WebSocket | null>(null);
 
   const scan = useQuery({
@@ -243,13 +271,25 @@ export default function ScanDetailPage({
         )
       : null;
 
+  const searchTerm = search.trim().toLowerCase();
   const filteredFindings = (findings.data ?? [])
     .filter((f) => !filterSev || f.severity === filterSev)
+    .filter((f) => {
+      if (!searchTerm) return true;
+      return (
+        f.name.toLowerCase().includes(searchTerm) ||
+        f.template_id.toLowerCase().includes(searchTerm) ||
+        f.matched_at.toLowerCase().includes(searchTerm) ||
+        (f.cve ?? "").toLowerCase().includes(searchTerm)
+      );
+    })
     .slice()
     .sort(
       (a, b) =>
         SEV_ORDER.indexOf(a.severity) - SEV_ORDER.indexOf(b.severity),
     );
+
+  const groups = computeGroups(filteredFindings, groupBy);
 
   return (
     <div className="space-y-5">
@@ -382,11 +422,89 @@ export default function ScanDetailPage({
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="section-title">
             Findings ({filteredFindings.length}
-            {filterSev ? ` of ${findings.data?.length ?? 0}` : ""})
+            {filterSev || searchTerm
+              ? ` of ${findings.data?.length ?? 0}`
+              : ""})
           </h2>
-          <span className="text-[11px] text-slate-500">
-            Click a row for full request / response / payload
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-500" />
+              <input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search name, template, URL, CVE…"
+                className="input h-8 w-64 pl-8 text-xs"
+              />
+            </div>
+            <div className="inline-flex overflow-hidden rounded-md border border-border-subtle text-xs">
+              <button
+                type="button"
+                onClick={() => setGroupBy("none")}
+                title="Flat list"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 transition ${
+                  groupBy === "none"
+                    ? "bg-accent/15 text-accent"
+                    : "text-slate-400 hover:bg-bg/60"
+                }`}
+              >
+                <List className="h-3 w-3" />
+                Flat
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupBy("issue")}
+                title="Group by issue (same template across URLs)"
+                className={`flex items-center gap-1.5 border-l border-border-subtle px-2.5 py-1.5 transition ${
+                  groupBy === "issue"
+                    ? "bg-accent/15 text-accent"
+                    : "text-slate-400 hover:bg-bg/60"
+                }`}
+              >
+                <Layers className="h-3 w-3" />
+                By issue
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupBy("url")}
+                title="Group by URL (same target with multiple issues)"
+                className={`flex items-center gap-1.5 border-l border-border-subtle px-2.5 py-1.5 transition ${
+                  groupBy === "url"
+                    ? "bg-accent/15 text-accent"
+                    : "text-slate-400 hover:bg-bg/60"
+                }`}
+              >
+                <Globe className="h-3 w-3" />
+                By URL
+              </button>
+            </div>
+            <div className="inline-flex overflow-hidden rounded-md border border-border-subtle text-xs">
+              <button
+                type="button"
+                onClick={() => setDensity("comfortable")}
+                title="Comfortable rows"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 transition ${
+                  density === "comfortable"
+                    ? "bg-accent/15 text-accent"
+                    : "text-slate-400 hover:bg-bg/60"
+                }`}
+              >
+                <Rows3 className="h-3 w-3" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setDensity("compact")}
+                title="Compact rows"
+                className={`flex items-center gap-1.5 border-l border-border-subtle px-2.5 py-1.5 transition ${
+                  density === "compact"
+                    ? "bg-accent/15 text-accent"
+                    : "text-slate-400 hover:bg-bg/60"
+                }`}
+              >
+                <AlignJustify className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
         </div>
 
         {selected.size > 0 && (
@@ -423,7 +541,11 @@ export default function ScanDetailPage({
         )}
 
         <div className="overflow-hidden rounded-md">
-          <table className="table">
+          <table
+            className={`table ${
+              density === "compact" ? "[&_td]:!py-1.5 [&_th]:!py-1.5" : ""
+            }`}
+          >
             <thead>
               <tr>
                 <th className="w-px pr-0">
@@ -469,63 +591,58 @@ export default function ScanDetailPage({
                   </tr>
                 ))}
               {!findings.isLoading &&
-                filteredFindings.map((f) => {
-                  const isSelected = selected.has(f.id);
+                groupBy === "none" &&
+                filteredFindings.map((f) =>
+                  renderFindingRow(
+                    f,
+                    selected,
+                    setSelected,
+                    setOpenFindingId,
+                    setPendingFindingDelete,
+                  ),
+                )}
+              {!findings.isLoading &&
+                groupBy !== "none" &&
+                (groups ?? []).map((g) => {
+                  const isOpen = expanded.has(g.key);
+                  const allIds = g.items.map((i) => i.id);
+                  const pickedInGroup = allIds.filter((id) =>
+                    selected.has(id),
+                  ).length;
+                  const sevCounts: Record<string, number> = {};
+                  for (const f of g.items)
+                    sevCounts[f.severity] = (sevCounts[f.severity] ?? 0) + 1;
                   return (
-                    <tr
-                      key={f.id}
-                      className={`cursor-pointer ${isSelected ? "bg-accent/5" : ""}`}
-                      onClick={() => setOpenFindingId(f.id)}
-                      title="View full payload"
-                    >
-                      <td
-                        className="pr-0"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${f.name}`}
-                          className="h-3.5 w-3.5 cursor-pointer accent-accent"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            const next = new Set(selected);
-                            if (e.target.checked) next.add(f.id);
-                            else next.delete(f.id);
-                            setSelected(next);
-                          }}
-                        />
-                      </td>
-                      <td>
-                        <SeverityPill severity={f.severity} />
-                      </td>
-                      <td className="font-medium text-slate-100">{f.name}</td>
-                      <td className="font-mono text-xs text-slate-400">
-                        {f.template_id}
-                      </td>
-                      <td className="font-mono text-xs text-slate-400">
-                        <span className="inline-flex items-center gap-1">
-                          {f.matched_at}
-                          <ExternalLink className="h-3 w-3 opacity-50" />
-                        </span>
-                      </td>
-                      <td className="font-mono text-xs text-slate-400">
-                        {f.cve ?? "—"}
-                      </td>
-                      <td
-                        className="text-right"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          onClick={() => setPendingFindingDelete([f])}
-                          className="rounded-md p-1.5 text-slate-500 transition hover:bg-severity-critical/15 hover:text-severity-critical"
-                          aria-label={`Delete ${f.name}`}
-                          title="Delete this finding"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
-                    </tr>
+                    <FragmentRow
+                      key={g.key}
+                      open={isOpen}
+                      group={g}
+                      sevCounts={sevCounts}
+                      pickedInGroup={pickedInGroup}
+                      onToggle={() => {
+                        const next = new Set(expanded);
+                        if (next.has(g.key)) next.delete(g.key);
+                        else next.add(g.key);
+                        setExpanded(next);
+                      }}
+                      onSelectGroup={(checked) => {
+                        const next = new Set(selected);
+                        if (checked) allIds.forEach((id) => next.add(id));
+                        else allIds.forEach((id) => next.delete(id));
+                        setSelected(next);
+                      }}
+                      renderChildren={() =>
+                        g.items.map((f) =>
+                          renderFindingRow(
+                            f,
+                            selected,
+                            setSelected,
+                            setOpenFindingId,
+                            setPendingFindingDelete,
+                          ),
+                        )
+                      }
+                    />
                   );
                 })}
               {!findings.isLoading && filteredFindings.length === 0 && (
@@ -762,6 +879,7 @@ function DiffPanel({ scanId, status }: { scanId: string; status: string }) {
       </div>
     );
   }
+  // diff cats
   const cats = [
     { k: "new" as const, label: "New", tone: "text-severity-critical", border: "border-severity-critical/30 bg-severity-critical/5" },
     { k: "regression" as const, label: "Regression", tone: "text-severity-high", border: "border-severity-high/30 bg-severity-high/5" },
@@ -811,5 +929,179 @@ function DiffPanel({ scanId, status }: { scanId: string; status: string }) {
         ))}
       </div>
     </div>
+  );
+}
+
+function computeGroups(
+  filtered: Finding[],
+  groupBy: "none" | "issue" | "url",
+): { key: string; label: string; sub?: string; items: Finding[] }[] | null {
+  if (groupBy === "none") return null;
+  const map = new Map<
+    string,
+    { key: string; label: string; sub?: string; items: Finding[] }
+  >();
+  for (const f of filtered) {
+    const key =
+      groupBy === "issue" ? `${f.template_id}|${f.name}` : f.matched_at;
+    const label = groupBy === "issue" ? f.name : f.matched_at;
+    const sub = groupBy === "issue" ? f.template_id : undefined;
+    const g = map.get(key);
+    if (g) g.items.push(f);
+    else map.set(key, { key, label, sub, items: [f] });
+  }
+  return Array.from(map.values()).sort((a, b) => {
+    const sa = SEV_ORDER.indexOf(worstSeverity(a.items) as Finding["severity"]);
+    const sb = SEV_ORDER.indexOf(worstSeverity(b.items) as Finding["severity"]);
+    if (sa !== sb) return sa - sb;
+    return b.items.length - a.items.length;
+  });
+}
+
+function worstSeverity(items: Finding[]): string {
+  let best = SEV_ORDER.length;
+  for (const f of items) {
+    const i = SEV_ORDER.indexOf(f.severity);
+    if (i < best) best = i;
+  }
+  return SEV_ORDER[best] ?? "info";
+}
+
+function renderFindingRow(
+  f: Finding,
+  selected: Set<string>,
+  setSelected: (s: Set<string>) => void,
+  setOpenFindingId: (id: string) => void,
+  setPendingFindingDelete: (l: Finding[]) => void,
+) {
+  const isSelected = selected.has(f.id);
+  return (
+    <tr
+      key={f.id}
+      className={`cursor-pointer ${isSelected ? "bg-accent/5" : ""}`}
+      onClick={() => setOpenFindingId(f.id)}
+      title="View full payload"
+    >
+      <td className="pr-0" onClick={(e) => e.stopPropagation()}>
+        <input
+          type="checkbox"
+          aria-label={`Select ${f.name}`}
+          className="h-3.5 w-3.5 cursor-pointer accent-accent"
+          checked={isSelected}
+          onChange={(e) => {
+            const next = new Set(selected);
+            if (e.target.checked) next.add(f.id);
+            else next.delete(f.id);
+            setSelected(next);
+          }}
+        />
+      </td>
+      <td>
+        <SeverityPill severity={f.severity} />
+      </td>
+      <td className="font-medium text-slate-100">{f.name}</td>
+      <td className="font-mono text-xs text-slate-400">{f.template_id}</td>
+      <td className="font-mono text-xs text-slate-400">
+        <span className="inline-flex items-center gap-1">
+          {f.matched_at}
+          <ExternalLink className="h-3 w-3 opacity-50" />
+        </span>
+      </td>
+      <td className="font-mono text-xs text-slate-400">{f.cve ?? "—"}</td>
+      <td className="text-right" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => setPendingFindingDelete([f])}
+          className="rounded-md p-1.5 text-slate-500 transition hover:bg-severity-critical/15 hover:text-severity-critical"
+          aria-label={`Delete ${f.name}`}
+          title="Delete this finding"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </td>
+    </tr>
+  );
+}
+
+function FragmentRow({
+  open,
+  group,
+  sevCounts,
+  pickedInGroup,
+  onToggle,
+  onSelectGroup,
+  renderChildren,
+}: {
+  open: boolean;
+  group: { key: string; label: string; sub?: string; items: Finding[] };
+  sevCounts: Record<string, number>;
+  pickedInGroup: number;
+  onToggle: () => void;
+  onSelectGroup: (checked: boolean) => void;
+  renderChildren: () => React.ReactNode;
+}) {
+  const totalCount = group.items.length;
+  const allSelected = pickedInGroup === totalCount && totalCount > 0;
+  const someSelected = pickedInGroup > 0 && !allSelected;
+  return (
+    <>
+      <tr
+        className="cursor-pointer bg-bg/40 hover:bg-bg/70"
+        onClick={onToggle}
+      >
+        <td className="pr-0" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            aria-label={`Select all in group ${group.label}`}
+            className="h-3.5 w-3.5 cursor-pointer accent-accent"
+            checked={allSelected}
+            ref={(el) => {
+              if (el) el.indeterminate = someSelected;
+            }}
+            onChange={(e) => onSelectGroup(e.target.checked)}
+          />
+        </td>
+        <td colSpan={6}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              {open ? (
+                <ChevronDown className="h-3.5 w-3.5 text-slate-400" />
+              ) : (
+                <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
+              )}
+              <div className="min-w-0">
+                <div className="truncate font-medium text-slate-100">
+                  {group.label}
+                </div>
+                {group.sub && (
+                  <div className="truncate font-mono text-[11px] text-slate-500">
+                    {group.sub}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-3 text-[11px] text-slate-400">
+              {SEV_ORDER.filter((s) => sevCounts[s]).map((s) => (
+                <span
+                  key={s}
+                  className={`inline-flex items-center gap-1 text-severity-${s}`}
+                  title={`${sevCounts[s]} ${s}`}
+                >
+                  <span className={`h-1.5 w-1.5 rounded-full bg-severity-${s}`} />
+                  {sevCounts[s]}
+                </span>
+              ))}
+              <span className="font-mono text-slate-300">
+                {totalCount}{" "}
+                <span className="text-slate-500">
+                  {totalCount === 1 ? "item" : "items"}
+                </span>
+              </span>
+            </div>
+          </div>
+        </td>
+      </tr>
+      {open && renderChildren()}
+    </>
   );
 }
