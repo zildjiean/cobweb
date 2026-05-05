@@ -101,9 +101,11 @@ export default function ScanDetailPage({
     Finding[] | null
   >(null);
   const [groupBy, setGroupBy] = useState<"none" | "issue" | "url">(() => {
-    if (typeof window === "undefined") return "none";
+    // Default to "issue" so e.g. one XSS template hitting 50 URLs collapses
+    // into a single expandable row instead of dominating the list.
+    if (typeof window === "undefined") return "issue";
     const v = window.localStorage.getItem("cobweb.findings.groupBy");
-    return v === "issue" || v === "url" ? v : "none";
+    return v === "issue" || v === "url" || v === "none" ? v : "issue";
   });
   const [density, setDensity] = useState<"comfortable" | "compact">(() => {
     if (typeof window === "undefined") return "comfortable";

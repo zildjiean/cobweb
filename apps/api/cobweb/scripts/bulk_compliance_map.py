@@ -135,6 +135,22 @@ def _filter_valid(rows: list[dict]) -> tuple[dict, dict, dict]:
     return owasp, pci, iso
 
 
+def _load_existing() -> tuple[dict, dict, dict]:
+    """Read the current compliance_map_llm.py dicts so incremental runs preserve them.
+
+    Returns ({}, {}, {}) if the file is missing or fails to import — bootstrap-safe.
+    """
+    try:
+        from cobweb.services.report_templates.compliance_map_llm import (
+            LLM_TEMPLATE_TO_ISO,
+            LLM_TEMPLATE_TO_OWASP,
+            LLM_TEMPLATE_TO_PCI,
+        )
+        return dict(LLM_TEMPLATE_TO_OWASP), dict(LLM_TEMPLATE_TO_PCI), dict(LLM_TEMPLATE_TO_ISO)
+    except ImportError:
+        return {}, {}, {}
+
+
 def _format_dict_literal(d: dict) -> str:
     """Render a dict as a deterministic Python literal (sorted keys, 4-space indent)."""
     if not d:
@@ -245,19 +261,33 @@ async def _amain(args: argparse.Namespace) -> int:
             return 4
         all_results.extend(rows)
 
-    owasp_map, pci_map, iso_map = _filter_valid(all_results)
+    owasp_new, pci_new, iso_new = _filter_valid(all_results)
     print(
-        f"classified: owasp={len(owasp_map)} pci={len(pci_map)} iso={len(iso_map)} "
+        f"classified: owasp={len(owasp_new)} pci={len(pci_new)} iso={len(iso_new)} "
         f"(of {len(todo)} requested)",
         file=sys.stderr,
     )
 
     if args.dry_run:
         print(json.dumps(
-            {"owasp": owasp_map, "pci": pci_map, "iso": iso_map},
+            {"owasp": owasp_new, "pci": pci_new, "iso": iso_new},
             indent=2, sort_keys=True,
         ))
         return 0
+
+    # Merge new results onto existing dicts so incremental runs preserve prior
+    # work. The default flow skips templates that are already mapped, so without
+    # this merge we'd shrink the file from N entries to whatever's new (often 0
+    # or a handful). New values win for the same template_id.
+    owasp_existing, pci_existing, iso_existing = _load_existing()
+    owasp_map = {**owasp_existing, **owasp_new}
+    pci_map = {**pci_existing, **pci_new}
+    iso_map = {**iso_existing, **iso_new}
+    print(
+        f"merged: owasp={len(owasp_map)} pci={len(pci_map)} iso={len(iso_map)} "
+        f"(was: owasp={len(owasp_existing)} pci={len(pci_existing)} iso={len(iso_existing)})",
+        file=sys.stderr,
+    )
 
     _write_output(owasp_map, pci_map, iso_map)
     print(f"wrote {OUTPUT_FILE}", file=sys.stderr)
