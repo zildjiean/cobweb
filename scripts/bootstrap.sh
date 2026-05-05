@@ -87,12 +87,23 @@ else
 fi
 
 # apps/web/.env.local
+# Default: leave NEXT_PUBLIC_API_BASE commented out so apps/web/lib/api.ts
+# derives the API base from window.location.hostname at runtime — that lets
+# the same build answer on multiple IPs / NAT paths without rebuilding.
+# Uncomment / set NEXT_PUBLIC_API_BASE only if the API lives on a different
+# host than the web (cross-origin deploy).
 WEB_ENV="apps/web/.env.local"
 if [[ -f "$WEB_ENV" && "$FORCE" -eq 0 ]]; then
   log "$WEB_ENV exists — skip (use --force to regenerate)"
 else
   log "writing $WEB_ENV"
-  printf 'NEXT_PUBLIC_API_BASE=http://%s:8000\n' "$LAN_IP" > "$WEB_ENV"
+  cat >"$WEB_ENV" <<EOF
+# Web runtime config.
+# Default: api.ts derives the API base from window.location.hostname at
+# runtime so the same build works on every IP / NAT path that reaches it.
+# Set this only if the API host differs from the web host:
+# NEXT_PUBLIC_API_BASE=http://${LAN_IP}:8000
+EOF
 fi
 
 # ---- 4. docker compose ------------------------------------------------------
