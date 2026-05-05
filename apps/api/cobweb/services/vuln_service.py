@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from cobweb.models.scan import Finding
 from cobweb.models.target import Target
 from cobweb.models.vulnerability import Vulnerability, VulnState
+from cobweb.services import suppression_service
 
 SLA_DAYS: dict[str, int | None] = {
     "critical": 7,
@@ -72,6 +73,11 @@ async def upsert_from_finding(db: AsyncSession, finding: Finding) -> Vulnerabili
         target = await db.get(Target, finding.target_id)
         if target is None:
             raise VulnError("Target not found")
+        # Auto-FP if user has suppressed this (target, dedupe_hash).
+        suppressed = await suppression_service.is_suppressed(
+            db, target_id=finding.target_id, dedupe_hash=finding.dedupe_hash
+        )
+        initial_state = VulnState.FALSE_POSITIVE if suppressed else VulnState.NEW
         vuln = Vulnerability(
             org_id=finding.org_id,
             project_id=target.project_id,
@@ -80,11 +86,11 @@ async def upsert_from_finding(db: AsyncSession, finding: Finding) -> Vulnerabili
             template_id=finding.template_id,
             name=finding.name,
             severity=sev,
-            state=VulnState.NEW,
+            state=initial_state,
             first_seen_scan_id=finding.scan_id,
             last_seen_scan_id=finding.scan_id,
             last_seen_at=now,
-            sla_due_at=_sla_due(sev, now),
+            sla_due_at=None if suppressed else _sla_due(sev, now),
         )
         db.add(vuln)
         await db.flush()
@@ -92,6 +98,12 @@ async def upsert_from_finding(db: AsyncSession, finding: Finding) -> Vulnerabili
 
     existing.last_seen_scan_id = finding.scan_id
     existing.last_seen_at = now
+    # Active suppression keeps the vuln in FALSE_POSITIVE — don't flip out of it.
+    if existing.state == VulnState.FALSE_POSITIVE:
+        if await suppression_service.is_suppressed(
+            db, target_id=finding.target_id, dedupe_hash=finding.dedupe_hash
+        ):
+            return existing
     if existing.state == VulnState.VERIFIED:
         existing.state = VulnState.REGRESSION
     elif existing.state == VulnState.RESOLVED:
@@ -106,12 +118,14 @@ async def transition(
     *,
     notes: str | None = None,
     accepted_until: datetime | None = None,
+    actor_user_id: str | None = None,
 ) -> Vulnerability:
     vuln = await db.get(Vulnerability, vuln_id)
     if vuln is None:
         raise VulnError("Vulnerability not found")
     if new_state not in VALID_TRANSITIONS.get(vuln.state, set()):
         raise VulnError(f"Cannot transition {vuln.state.value} → {new_state.value}")
+    prev_state = vuln.state
     vuln.state = new_state
     if notes is not None:
         vuln.notes = notes
@@ -119,6 +133,20 @@ async def transition(
         if accepted_until is None:
             raise VulnError("ACCEPTED_RISK requires accepted_until")
         vuln.accepted_until = accepted_until
+    # Auto-suppress on FP, un-suppress on FP -> NEW.
+    if new_state == VulnState.FALSE_POSITIVE:
+        await suppression_service.upsert_suppression(
+            db,
+            org_id=vuln.org_id,
+            target_id=vuln.target_id,
+            dedupe_hash=vuln.dedupe_hash,
+            created_by=actor_user_id,
+            reason=notes,
+        )
+    elif prev_state == VulnState.FALSE_POSITIVE and new_state == VulnState.NEW:
+        await suppression_service.remove_suppression(
+            db, target_id=vuln.target_id, dedupe_hash=vuln.dedupe_hash
+        )
     return vuln
 
 

@@ -22,6 +22,7 @@ import {
 import { api, tokenStore } from "@/lib/api";
 import CommandPalette from "@/components/CommandPalette";
 import ReleaseNotesBell from "@/components/ReleaseNotesBell";
+import ThemeToggle from "@/components/ThemeToggle";
 import { CURRENT_VERSION } from "@/lib/release-notes";
 
 const NAV_GROUPS: {
@@ -243,6 +244,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 ⌘K
               </kbd>
             </button>
+            <ThemeToggle />
             <ReleaseNotesBell />
             <span className="hidden sm:inline">{me?.email}</span>
             {me?.role && (

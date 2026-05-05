@@ -105,6 +105,7 @@ async def transition_vuln(
         v = await vuln_service.transition(
             db, vuln_id, VulnState(body.state),
             notes=body.notes, accepted_until=accepted_until,
+            actor_user_id=current.user.id,
         )
     except VulnError as e:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(e)) from None

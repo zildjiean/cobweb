@@ -25,17 +25,19 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // Cobweb dark theme — inspired by Rapid7 InsightAppSec / Acunetix
+        // CSS-variable backed so the same utility classes work in both
+        // dark (default) and .light themes — see globals.css for values.
         bg: {
-          DEFAULT: "#0a0e1a",
-          elevated: "#111726",
-          subtle: "#0d1320",
+          DEFAULT: "rgb(var(--color-bg) / <alpha-value>)",
+          elevated: "rgb(var(--color-bg-elevated) / <alpha-value>)",
+          subtle: "rgb(var(--color-bg-subtle) / <alpha-value>)",
         },
         border: {
-          subtle: "#1c2436",
-          DEFAULT: "#283149",
-          strong: "#3a4566",
+          subtle: "rgb(var(--color-border-subtle) / <alpha-value>)",
+          DEFAULT: "rgb(var(--color-border) / <alpha-value>)",
+          strong: "rgb(var(--color-border-strong) / <alpha-value>)",
         },
+        // Brand + severity stay constant across themes (still readable on both).
         accent: {
           DEFAULT: "#6286ff",
           hover: "#7d9bff",

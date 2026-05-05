@@ -1,4 +1,4 @@
-export const CURRENT_VERSION = "0.4.0";
+export const CURRENT_VERSION = "0.5.0";
 
 export type Highlight = {
   label: string;
@@ -13,6 +13,38 @@ export type Release = {
 };
 
 export const RELEASES: Release[] = [
+  {
+    version: "0.5.0",
+    date: "2026-05-05",
+    title: "Quieter findings, brighter UI",
+    highlights: [
+      {
+        label: "Severity floor on the Vulnerabilities board",
+        detail:
+          "The Kanban now defaults to Medium and above — Low/Info noise is hidden until you opt in. Min-severity dropdown adds a 'show all' option, and your choice is remembered.",
+      },
+      {
+        label: "Group by template",
+        detail:
+          "Vulnerabilities sharing the same template on the same target collapse into a single card with an ×N occurrences badge. Expand to see members; bulk → next-state and bulk FP work in one click.",
+      },
+      {
+        label: "Auto-suppress false positives",
+        detail:
+          "Marking a vuln as False Positive now creates a 90-day suppression on (target, dedupe_hash). Future scans that re-detect the same finding land directly in FALSE_POSITIVE state — no triage churn.",
+      },
+      {
+        label: "Suppressed drawer + un-suppress",
+        detail:
+          "New 'Suppressed' button on the Vulnerabilities header opens a side panel listing every active suppression with TTL countdown. Un-suppress reverts the matching vulnerability back to NEW.",
+      },
+      {
+        label: "Light theme",
+        detail:
+          "Sun/Moon toggle in the dashboard header. Picks up your OS preference on first load, then persists per-browser. Pre-paint script means no flash of the wrong theme.",
+      },
+    ],
+  },
   {
     version: "0.4.0",
     date: "2026-05-03",

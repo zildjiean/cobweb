@@ -15,6 +15,7 @@ from cobweb.models.scan import (
     Severity,
 )
 from cobweb.models.schedule import ScanSchedule, ScheduleFrequency
+from cobweb.models.suppression import FindingSuppression
 from cobweb.models.target import Target, TargetStatus
 from cobweb.models.user import User
 from cobweb.models.vulnerability import Vulnerability, VulnState
@@ -24,6 +25,7 @@ __all__ = [
     "AuditLog",
     "Finding",
     "FindingRemediation",
+    "FindingSuppression",
     "FindingTranslation",
     "NotificationChannel",
     "NotificationRule",

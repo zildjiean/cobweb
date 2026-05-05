@@ -20,9 +20,28 @@ export const metadata: Metadata = {
   description: "Multi-tenant DAST scanning powered by Nuclei and OWASP ZAP",
 };
 
+// Run before paint to prevent FOUC: read the saved theme (or system preference)
+// and set the matching class on <html> so the very first frame is correct.
+const noFoucScript = `
+(function () {
+  try {
+    var t = localStorage.getItem('cobweb.theme');
+    if (t !== 'light' && t !== 'dark') {
+      t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.classList.add(t);
+  } catch (e) {
+    document.documentElement.classList.add('dark');
+  }
+})();
+`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`dark ${inter.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: noFoucScript }} />
+      </head>
       <body className="font-sans antialiased">
         <Providers>{children}</Providers>
       </body>
